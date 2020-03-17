@@ -1,0 +1,2 @@
+# Slashes with omitted t.vertices and v.normals are not allowed
+f 3// 1// 2//
