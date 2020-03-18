@@ -1,4 +1,7 @@
 # 3dconv
+
+![](https://github.com/brex-it/3dconv/workflows/CI/badge.svg)
+
 Conversion tool for 3D mesh file formats. With 3dconv we can read a model from
 an arbitrary mesh file (in a supported input format) make some basic
 transformations and write the result into an output file in a supported output
@@ -88,7 +91,6 @@ On how to add plugins see [Plugins](./plugins/README.md).
 * Reconsider plugin system
 * After a better plugin system design use static library for testing (hopefully
   results in better test build time)
-* Set up CI
 
 ## License
 This software is distributed under the terms and conditions of the 3-Clause BSD
