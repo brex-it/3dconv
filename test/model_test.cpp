@@ -109,12 +109,17 @@ TEST_CASE("Face insertion into Model", "[face][model]") {
 	m->add_face(f);
 	REQUIRE(m->faces().size() == 1);
 
-	/* After modifying the face vertices it counts as
-	 * a different face so we can insert it into m. */
+	/* A face which has more than two common vertices with any
+	 * other already inserted face should not be inserted. */
 	f.add_vertex(3);
 	m->add_face(f);
+	REQUIRE(m->faces().size() == 1);
+
+	/* Adding a "totally" different face is allowed. */
+	Face f_new{m, {2, 4, 6, 8}};
+	m->add_face(f_new);
 	REQUIRE(m->faces().size() == 2);
-	f_it = m->faces().find(Face{m, {0, 1, 2, 3}});
+	f_it = m->faces().find(Face{m, {2, 4, 6, 8}});
 	REQUIRE(f_it != m->faces().end());
 
 	/* We cannot insert f into a Model object which is
@@ -310,4 +315,37 @@ TEST_CASE("Triangulation test", "[face][model]") {
 	REQUIRE(f_it++->vertices() == vector<size_t>{6, 4, 5});
 	REQUIRE(f_it++->vertices() == vector<size_t>{6, 7, 4});
 	REQUIRE(f_it == m->faces().end());
+}
+
+TEST_CASE("Connectivity test", "[face][model]") {
+	auto m = Model::create();
+
+	/* Add 6 vertices */
+	for (size_t i = 0; i < 6; ++i) {
+		m->add_vertex({1.f, 2.f, 3.f, 1.f});
+	}
+
+	/* Add faces connecting all vertices */
+	Face faces[3]{
+		{m, {0, 1, 2}},
+		{m, {0, 1, 3}},
+		{m, {4, 5, 3}},
+	};
+	for (size_t i = 0; i < 3; ++i) {
+		m->add_face(faces[i]);
+	}
+	REQUIRE(m->is_connected());
+
+	/* Adding more vertices without connecting them
+	 * results in a disconnected model. */
+	for (size_t i = 0; i < 3; ++i) {
+		m->add_vertex({1.f, 2.f, 3.f, 1.f});
+	}
+	REQUIRE(!m->is_connected());
+
+	/* We cover all of the vertices with a new face but
+	 * it is not connected to the previous faces so the
+	 * model remains disconnected. */
+	m->add_face({m, {6, 7, 8}});
+	REQUIRE(!m->is_connected());
 }

@@ -1,12 +1,16 @@
+#include <algorithm>
 #include <cmath>
 #include <iostream>
+#include <iterator>
 #include <limits>
+#include <list>
 #include <memory>
 #include <set>
 #include <sstream>
 
 #include <3dconv/linalg.hpp>
 #include <3dconv/model.hpp>
+#include <3dconv/utils.hpp>
 
 using namespace linalg;
 using namespace std;
@@ -99,7 +103,12 @@ Face::operator<(const Face &r) const {
 			this->vertices_.cend());
 	auto rs = std::set<size_t>(r.vertices_.cbegin(),
 			r.vertices_.cend());
-	return ls < rs;
+
+	vector<size_t> intersection;
+	set_intersection(ls.cbegin(), ls.cend(), rs.cbegin(), rs.cend(),
+		back_inserter(intersection));
+
+	return ls < rs && intersection.size() < 3;
 }
 
 /* -------- Private methods -------- */
@@ -248,12 +257,23 @@ Model::is_triangulated() const
 	return is_triangulated_;
 }
 
+bool
+Model::is_connected() const
+{
+	if (recalc_connectivity_) {
+		is_connected_ = check_connectivity(faces_, vertices_.size());
+		recalc_connectivity_ = false;
+	}
+	return is_connected_;
+}
+
 /* -------- Modifiers -------- */
 
 void
 Model::add_vertex(const FVec<float, 4> &&v)
 {
 	vertices_.emplace_back(v);
+	recalc_connectivity_ = true;
 }
 
 void
@@ -283,6 +303,7 @@ Model::add_face(const Face &f)
 		is_triangulated_ = false;
 	}
 	is_validated_ = false;
+	recalc_connectivity_ = true;
 }
 
 void
@@ -368,6 +389,8 @@ Model::triangulate()
 	faces_.merge(new_faces);
 }
 
+/* -------- Queries, validation -------- */
+
 float
 Model::surface_area()
 {
@@ -440,4 +463,54 @@ Model::validate()
 		}
 	}
 	is_validated_ = true;
+}
+
+/* -------- Private methods -------- */
+
+bool
+Model::check_connectivity(const set<Face> &faces, const size_t nverts)
+{
+	if (faces.empty()) {
+		return nverts ? false : true;
+	}
+
+	list<Bitset> connections;
+
+	/* Create Bitsets from faces: every bit corresponding
+	 * to vertex indices is set to true.  */
+	Bitset bs{nverts};
+	for (const auto &f : faces) {
+		bs.reset();
+		for (size_t v : f.vertices()) {
+			bs.set(v);
+		}
+		connections.emplace_front(bs);
+	}
+
+	/* Walk through the edges in a BFS manner. */
+	Bitset bs_union{connections.front()};
+	connections.erase(connections.begin());
+	/* NOTE: Maximum nconn iterations are needed to ensure
+	 *       that no more connections are present. Without
+	 *       this limit disconnected components would result
+	 *       in infinite loop. */
+	size_t nconn = connections.size();
+	while (!connections.empty() && nconn--) {
+		for (auto c = connections.cbegin(); c != connections.cend();) {
+			if ((*c & bs_union).any()) {
+				bs_union |= *c;
+				c = connections.erase(c);
+			} else {
+				++c;
+			}
+		}
+	}
+
+	/* Return true if all vertices have been visited.
+	 * NOTE: We also check if no faces remained in the connections
+	 *       list, because we don't require faces to only contain
+	 *       valid Face objects. (at least 3 vertices, no common
+	 *       triangles or higher order shapes etc.) */
+	return connections.empty() && bs_union.all();
+
 }

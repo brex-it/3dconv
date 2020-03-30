@@ -150,8 +150,11 @@ public:
 	const F32_3D_VecT &vertex_normals() const;
 	/** Getter for the set containing all faces. */
 	const std::set<Face> &faces() const;
-	/** Returns true if all faces are triangles ans false otherwise. */
+	/** Returns true if all faces are triangles and false otherwise. */
 	bool is_triangulated() const;
+	/** Returns true if all faces in the model are connected and
+	 * false if the model consists of more than one components. */
+	bool is_connected() const;
 
 	/** Adds a new geometric vertex of the type linalg::FVec<float, 4>
 	 * to the global vertex vector. The fourth coordinate is an
@@ -199,8 +202,14 @@ protected:
 	F32_3D_VecT vertex_normals_;
 	std::set<Face> faces_;
 
+	mutable bool is_connected_{true};
 	bool is_triangulated_{true};
 	bool is_validated_{true};
+
+	mutable bool recalc_connectivity_{true};
+
+	static bool check_connectivity(const std::set<Face> &faces,
+			const size_t nverts);
 };
 
 #endif

@@ -25,6 +25,7 @@ writer_plugins = [
 ]
 
 sources_no_main = [
+	'bitset.cpp',
 	'cli.cpp',
 	'model.cpp',
 ]

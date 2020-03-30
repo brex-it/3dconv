@@ -1,4 +1,5 @@
 test_names = [
+	'bitset',
 	'cli',
 	'linalg',
 	'model',
