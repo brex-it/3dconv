@@ -134,7 +134,7 @@ public:
 	}
 
 private:
-	std::shared_ptr<Model> model_;
+	std::weak_ptr<Model> model_;
 
 	IndexVecT vertices_;
 	IndexVecT texture_vertices_;
@@ -145,6 +145,8 @@ private:
 
 	void validate() const;
 	FVec<float, 3> compute_normal(Normalize normalize = Normalize::Yes) const;
+
+	std::shared_ptr<Model> get_model_shptr() const;
 };
 
 /**
@@ -196,7 +198,8 @@ public:
 	/** Adds a new Face object to the set of faces. Only faces associated
 	 * with the actual Model instances will be accepted. */
 	void add_face(const Face &f) {
-		if (f.model_.get() != this) {
+		auto model_ptr = f.get_model_shptr().get();
+		if (model_ptr != this) {
 			throw ModelError("Faces can only be added to their "
 					"associated Model.");
 		}

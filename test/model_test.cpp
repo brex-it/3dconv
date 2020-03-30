@@ -125,6 +125,37 @@ TEST_CASE("Face insertion into Model", "[face][model]") {
 	REQUIRE(m2->faces().size() == 0);
 }
 
+
+TEST_CASE("weak_ptr to the assoc. Model should prevent reference cycles",
+		"[face][error-handling]") {
+	/* NOTE: Situations like this are not likely to happen because Face
+	 *       objects are copied as a part of their associated Model object.
+	 *       Fortunately, there are no other currently known situation
+	 *       where calling any Model or Face related public member
+	 *       function results in Model expiration error.
+	 * POSSIBLE IMPROVEMENT: Maybe Face class should be a private type of
+	 *                       Model. ?? */
+	auto m = Model::create();
+	m->add_vertex({1.43, 5.6, 17, 1});
+	m->add_vertex({-4.2, .66, -1.4, 1});
+	m->add_vertex({1, -6.4, 11, 1});
+	Face f1{m};
+	{
+		auto m_expiring = Model::create(m);
+		Face f2{m_expiring, {0, 1, 2}};
+		/* Copy f2's state before normal computation. */
+		Face f3{f2};
+		/* Model object pointed by m_expiring is alive here. */
+		REQUIRE_NOTHROW(f2.normal());
+		/* Weak pointer in f3 is copied into f1. */
+		f1 = f3;
+		/* Model object pointed by m_expiring is destructed here. */
+	}
+	/* The locking of weak_ptr in f1 yields a nullptr. */
+	REQUIRE_THROWS_MATCHES(f1.normal(), ModelError,
+		Message("The associated Model object has been expired."));
+}
+
 TEST_CASE("Test model validation", "[face][model][error-handling]") {
 	auto m = Model::create();
 

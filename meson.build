@@ -1,7 +1,7 @@
 project(
 	'3dconv',
 	'cpp',
-	version : '0.1.0',
+	version : '0.1.1',
 	license : 'BSD-3-Clause',
 	default_options : ['cpp_std=c++17']
 )

@@ -26,10 +26,25 @@ Face::Face(const shared_ptr<Model> model, const IndexVecT &vertices,
 //	validate();
 }
 
+inline shared_ptr<Model>
+Face::get_model_shptr() const
+{
+	auto model_shptr = model_.lock();
+	if (!model_shptr) {
+		throw ModelError("The associated Model object has been expired.");
+	}
+	return model_shptr;
+}
+
 inline FVec<float, 3>
 Face::compute_normal(Normalize normalize) const
 {
-	const auto &v = model_->vertices();
+	if (vertices_.size() < 3) {
+		throw ModelError("Face must contain at least 3 vertices.");
+	}
+
+	auto model_shptr = get_model_shptr();
+	const auto &v = model_shptr->vertices();
 	FVec<float, 4> plane_vec1 = v[vertices_[1]] - v[vertices_[0]];
 	FVec<float, 4> plane_vec2 = v[vertices_[2]] - v[vertices_[0]];
 
@@ -56,18 +71,20 @@ Face::validate() const
 			"normals or the same number of vertex normals as "
 			"geometric vertices.");
 	}
+
+	auto model_shptr = get_model_shptr();
 	for (const auto &v : vertices_) {
-		if (v >= model_->vertices().size()) {
+		if (v >= model_shptr->vertices().size()) {
 			throw ModelError("Invalid vertex index.");
 		}
 	}
 	for (const auto &tv : texture_vertices_) {
-		if (tv >= model_->texture_vertices().size()) {
+		if (tv >= model_shptr->texture_vertices().size()) {
 			throw ModelError("Invalid texture vertex index.");
 		}
 	}
 	for (const auto &vn : vertex_normals_) {
-		if (vn >= model_->vertex_normals().size()) {
+		if (vn >= model_shptr->vertex_normals().size()) {
 			throw ModelError("Invalid vertex normal index.");
 		}
 	}
@@ -75,7 +92,7 @@ Face::validate() const
 	/* Checking co-planarity */
 //	if (vsz > 3) {
 //		const auto normvec = compute_normal(Normalize::No);
-//		const auto &mv = model_->vertices();
+//		const auto &mv = model_shptr->vertices();
 //		for (size_t i = 3; i < vsz; ++i) {
 //			const auto plane_vec =
 //				vec_slice<0, 3>(mv[vertices_[i]] - mv[vertices_[0]]);
