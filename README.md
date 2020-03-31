@@ -71,9 +71,10 @@ found in the build directory (`3dconv`).
 
 ## Testing
 The project provides an exhaustive unittest collection. The simplest way to run
-all of the tests is the following (requires a previous meson configuration step):
+all of the tests is the following:
 
 ```sh
+$ meson . build -Dbuild_tests=true
 $ ninja -C build test
 ```
 

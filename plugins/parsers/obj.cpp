@@ -146,8 +146,8 @@ face(std::istringstream &lss, std::shared_ptr<Model> model)
 	Face face{model};
 
 	/* Variables for group consistency checking */
-	int slashes = -1;
-	bool saved_has_texture;
+	int slashes{-1};
+	bool saved_has_texture{false};
 
 	while (lss >> group) {
 		if (group.back() == '/') {

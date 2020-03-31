@@ -3,7 +3,13 @@ project(
 	'cpp',
 	version : '0.1.1',
 	license : 'BSD-3-Clause',
-	default_options : ['cpp_std=c++17']
+	default_options : [
+		'b_lto=true',
+		'b_pie=true',
+		'cpp_std=c++17',
+		'debug=false',
+		'optimization=2',
+	]
 )
 
 incdirs = include_directories(
@@ -23,24 +29,27 @@ sources_no_main = [
 	'model.cpp',
 ]
 
-all_src_no_main = []
-
+plugin_paths = []
 foreach parser : parser_plugins
-	all_src_no_main += join_paths(meson.source_root(),
-		'plugins/parsers', parser)
+	plugin_paths += files(join_paths('plugins/parsers', parser))
 endforeach
 
 foreach writer : writer_plugins
-	all_src_no_main += join_paths(meson.source_root(),
-		'plugins/writers', writer)
+	plugin_paths += files(join_paths('plugins/writers', writer))
 endforeach
 
+src_no_main_paths = []
 foreach source : sources_no_main
-	all_src_no_main += join_paths(meson.source_root(), 'src', source)
+	src_no_main_paths += files(join_paths('src', source))
 endforeach
 
-executable('3dconv', [all_src_no_main, 'src/main.cpp'],
+executable('3dconv', [plugin_paths, src_no_main_paths, 'src/main.cpp'],
 	include_directories : incdirs)
 
+# Subdirs
+
 subdir('doc')
-subdir('test')
+
+if get_option('build_tests')
+	subdir('test')
+endif

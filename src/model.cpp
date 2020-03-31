@@ -11,6 +11,10 @@
 using namespace linalg;
 using namespace std;
 
+/* ======== Face implementation ======== */
+
+/* -------- Constructors -------- */
+
 Face::Face(const shared_ptr<Model> model)
 	: model_{model}
 {}
@@ -25,6 +29,80 @@ Face::Face(const shared_ptr<Model> model, const IndexVecT &vertices,
 //	compute_normal();
 //	validate();
 }
+
+/* -------- Getters -------- */
+
+const Face::IndexVecT &
+Face::vertices() const
+{
+	return vertices_;
+}
+
+const Face::IndexVecT &
+Face::texture_vertices() const
+{
+	return texture_vertices_;
+}
+
+const Face::IndexVecT &
+Face::vertex_normals() const
+{
+	return vertex_normals_;
+}
+
+const FVec<float, 3> &
+Face::normal() const
+{
+	if (!is_normal_set_) {
+		normal_ = compute_normal();
+		is_normal_set_ = true;
+	}
+	return normal_;
+}
+
+/* -------- Modifiers -------- */
+
+void
+Face::add_vertex(const size_t v)
+{
+	auto found = std::find(vertices_.cbegin(), vertices_.cend(), v);
+	if (found == vertices_.cend()) {
+		vertices_.push_back(v);
+	}
+}
+
+void
+Face::add_texture_vertex(const size_t tv) {
+	auto found = std::find(texture_vertices_.cbegin(),
+			texture_vertices_.cend(), tv);
+	if (found == texture_vertices_.cend()) {
+		texture_vertices_.push_back(tv);
+	}
+}
+
+void
+Face::add_vertex_normal(const size_t vn) {
+		vertex_normals_.push_back(vn);
+}
+
+void
+Face::set_normal(const FVec<float, 3> &n) {
+	normal_ = n;
+	is_normal_set_ = true;
+}
+
+/* -------- Operators -------- */
+
+bool
+Face::operator<(const Face &r) const {
+	auto ls = std::set<size_t>(this->vertices_.cbegin(),
+			this->vertices_.cend());
+	auto rs = std::set<size_t>(r.vertices_.cbegin(),
+			r.vertices_.cend());
+	return ls < rs;
+}
+
+/* -------- Private methods -------- */
 
 inline shared_ptr<Model>
 Face::get_model_shptr() const
@@ -104,6 +182,11 @@ Face::validate() const
 //	}
 }
 
+
+/* ======== Model implementation ======== */
+
+/* -------- Constructors (static creators) -------- */
+
 namespace {
 
 /* Struct derived from Model because Model's constructors are protected
@@ -131,6 +214,75 @@ Model::create(const std::shared_ptr<const Model> other)
 		const_cast<Face &>(f).model_ = model;
 	}
 	return model;
+}
+
+/* -------- Getters -------- */
+
+const F32_4D_VecT &
+Model::vertices() const
+{
+	return vertices_;
+}
+
+const F32_3D_VecT &
+Model::texture_vertices() const
+{
+	return texture_vertices_;
+}
+
+const F32_3D_VecT &
+Model::vertex_normals() const
+{
+	return vertex_normals_;
+}
+
+const set<Face> &
+Model::faces() const
+{
+	return faces_;
+}
+
+bool
+Model::is_triangulated() const
+{
+	return is_triangulated_;
+}
+
+/* -------- Modifiers -------- */
+
+void
+Model::add_vertex(const FVec<float, 4> &&v)
+{
+	vertices_.emplace_back(v);
+}
+
+void
+Model::add_texture_vertex(const FVec<float, 3> &&tv)
+{
+	texture_vertices_.emplace_back(tv);
+}
+
+void
+Model::add_vertex_normal(const FVec<float, 3> &&vn)
+{
+	vertex_normals_.emplace_back(vn);
+}
+
+void
+Model::add_face(const Face &f)
+{
+	auto model_ptr = f.get_model_shptr().get();
+	if (model_ptr != this) {
+		throw ModelError("Faces can only be added to their "
+				"associated Model.");
+	}
+
+	faces_.insert(f);
+
+	if (f.vertices().size() > 3) {
+		is_triangulated_ = false;
+	}
+	is_validated_ = false;
 }
 
 void

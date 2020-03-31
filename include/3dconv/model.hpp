@@ -69,19 +69,13 @@ public:
 			const FVec<float, 3> &normal = {});
 
 	/** Getter for index vector of vertices. */
-	const auto &vertices() const { return vertices_; }
+	const IndexVecT &vertices() const;
 	/** Getter for index vector of texture vertices. */
-	const auto &texture_vertices() const { return texture_vertices_; }
+	const IndexVecT &texture_vertices() const;
 	/** Getter for index vector of vertex normals. */
-	const auto &vertex_normals() const { return vertex_normals_; }
+	const IndexVecT &vertex_normals() const;
 	/** Getter for face normal vector. */
-	const auto &normal() const {
-		if (!is_normal_set_) {
-			normal_ = compute_normal();
-			is_normal_set_ = true;
-		}
-		return normal_;
-	}
+	const FVec<float, 3> &normal() const;
 
 	/** Adds a new vertex index.
 	 * At the time of model validation (see Model::validate()) the index
@@ -89,12 +83,8 @@ public:
 	 *
 	 * The given index must be unique in the actual object. If it's not
 	 * unique, no index will be added. */
-	void add_vertex(const size_t v) {
-		auto found = std::find(vertices_.cbegin(), vertices_.cend(), v);
-		if (found == vertices_.cend()) {
-			vertices_.push_back(v);
-		}
-	}
+	void add_vertex(const size_t v);
+
 	/** Adds a new texture vertex index.
 	 * At the time of model validation (see Model::validate()) the index
 	 * must be in the index range of the associated Model's
@@ -102,36 +92,21 @@ public:
 	 *
 	 * The given index must be unique in the actual object. If it's not
 	 * unique, no index will be added. */
-	void add_texture_vertex(const size_t tv) {
-		auto found = std::find(texture_vertices_.cbegin(),
-				texture_vertices_.cend(), tv);
-		if (found == texture_vertices_.cend()) {
-			texture_vertices_.push_back(tv);
-		}
-	}
+	void add_texture_vertex(const size_t tv);
+
 	/** Adds a new vertex normal index.
 	 * At the time of model validation (see Model::validate()) the index
 	 * must be in the index range of the associated Model's
 	 * vertex_normals vector. */
-	void add_vertex_normal(const size_t vn) {
-			vertex_normals_.push_back(vn);
-	}
+	void add_vertex_normal(const size_t vn);
+
 	/** Sets a predefined face normal.
 	 * If none is set, normal vector will be calculated on demand. */
-	void set_normal(const FVec<float, 3> &n) {
-		normal_ = n;
-		is_normal_set_ = true;
-	}
+	void set_normal(const FVec<float, 3> &n);
 
 	/** Less-than operator for using the class as key value
 	 * in ordered containers. */
-	bool operator<(const Face &r) const {
-		auto ls = std::set<size_t>(this->vertices_.cbegin(),
-				this->vertices_.cend());
-		auto rs = std::set<size_t>(r.vertices_.cbegin(),
-				r.vertices_.cend());
-		return ls < rs;
-	}
+	bool operator<(const Face &r) const;
 
 private:
 	std::weak_ptr<Model> model_;
@@ -168,49 +143,30 @@ public:
 		const std::shared_ptr<const Model> other);
 
 	/** Getter for vertices vector. */
-	const auto &vertices() const { return vertices_; }
+	const F32_4D_VecT &vertices() const;
 	/** Getter for texture vertices vector. */
-	const auto &texture_vertices() const { return texture_vertices_; }
+	const F32_3D_VecT  &texture_vertices() const;
 	/** Getter for vertex normals vector. */
-	const auto &vertex_normals() const { return vertex_normals_; }
+	const F32_3D_VecT &vertex_normals() const;
 	/** Getter for the set containing all faces. */
-	const auto &faces() const { return faces_; }
+	const std::set<Face> &faces() const;
 	/** Returns true if all faces are triangles ans false otherwise. */
-	const auto is_triangulated() const { return is_triangulated_; }
+	bool is_triangulated() const;
 
 	/** Adds a new geometric vertex of the type linalg::FVec<float, 4>
 	 * to the global vertex vector. The fourth coordinate is an
 	 * additional homogeneous coordinate and if it is not used for
 	 * specific calculations it should be set to some positive value. */
-	void add_vertex(const FVec<float, 4> &&v) {
-		vertices_.emplace_back(v);
-	}
+	void add_vertex(const FVec<float, 4> &&v);
 	/** Adds a new texture vertex of the type linalg::FVec<float, 3>
 	 * to the global texture vertex vector. */
-	void add_texture_vertex(const FVec<float, 3> &&tv) {
-		texture_vertices_.emplace_back(tv);
-	}
+	void add_texture_vertex(const FVec<float, 3> &&tv);
 	/** Adds a new vertex normal of the type linalg::FVec<float, 3>
 	 * to the global vertex normal vector. */
-	void add_vertex_normal(const FVec<float, 3> &&vn) {
-		vertex_normals_.emplace_back(vn);
-	}
+	void add_vertex_normal(const FVec<float, 3> &&vn);
 	/** Adds a new Face object to the set of faces. Only faces associated
 	 * with the actual Model instances will be accepted. */
-	void add_face(const Face &f) {
-		auto model_ptr = f.get_model_shptr().get();
-		if (model_ptr != this) {
-			throw ModelError("Faces can only be added to their "
-					"associated Model.");
-		}
-
-		faces_.insert(f);
-
-		if (f.vertices().size() > 3) {
-			is_triangulated_ = false;
-		}
-		is_validated_ = false;
-	}
+	void add_face(const Face &f);
 
 	/** Accepts a four-dimensional transformation matrix and performs
 	 * the transformation on the model. The matrix should operate on
