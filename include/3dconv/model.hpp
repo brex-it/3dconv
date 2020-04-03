@@ -2,6 +2,7 @@
 #define _3DCONV_MODEL_HPP
 
 #include <algorithm>
+#include <map>
 #include <memory>
 #include <set>
 #include <stdexcept>
@@ -109,7 +110,7 @@ public:
 	bool operator<(const Face &r) const;
 
 private:
-	std::weak_ptr<Model> model_;
+	mutable std::weak_ptr<Model> model_;
 
 	IndexVecT vertices_;
 	IndexVecT texture_vertices_;
@@ -150,11 +151,6 @@ public:
 	const F32_3D_VecT &vertex_normals() const;
 	/** Getter for the set containing all faces. */
 	const std::set<Face> &faces() const;
-	/** Returns true if all faces are triangles and false otherwise. */
-	bool is_triangulated() const;
-	/** Returns true if all faces in the model are connected and
-	 * false if the model consists of more than one components. */
-	bool is_connected() const;
 
 	/** Adds a new geometric vertex of the type linalg::FVec<float, 4>
 	 * to the global vertex vector. The fourth coordinate is an
@@ -178,20 +174,31 @@ public:
 	/** Makes all faces triangular by dividing faces with more than
 	 * three vertices. */
 	void triangulate();
+
 	/** Calculates and returns the surface area of the entire model. */
-	float surface_area();
+	float surface_area() const;
 	/** Calculates and returns the volume of the entire model. */
-	float volume();
+	float volume() const;
+	/** Returns true if all faces are triangles and false otherwise. */
+	bool is_triangulated() const;
+	/** Returns true if all faces in the model are connected and
+	 * false if the model consists of more than one components. */
+	bool is_connected() const;
+	/** Returns true if the model is convex. If any of the vertices
+	 * violates convexity (even due to non co-planar face vertices)
+	 * this function should return false. */
+	bool is_convex() const;
 
 	/** Validates the model by checking the index consistency and
 	 * geometric validity of every faces. */
-	void validate();
+	void validate() const;
 
 protected:
 	/* Prevent public construction without shared_ptr wrapper */
 	Model() = default;
 	Model(const Model &other) = default;
 
+private:
 	/* Prevent move and assignment */
 	Model(Model &&) = delete;
 	Model &operator=(const Model &) = delete;
@@ -203,13 +210,19 @@ protected:
 	std::set<Face> faces_;
 
 	mutable bool is_connected_{true};
+	mutable bool is_convex_{true};
 	bool is_triangulated_{true};
-	bool is_validated_{true};
+	mutable bool is_validated_{true};
 
 	mutable bool recalc_connectivity_{true};
+	mutable bool recalc_convexity_{true};
+
+	void needs_recalc_properties();
 
 	static bool check_connectivity(const std::set<Face> &faces,
 			const size_t nverts);
+	using FaceToIndexVecMap = std::map<Face, typename Face::IndexVecT>;
+	const FaceToIndexVecMap get_concave_vertices() const;
 };
 
 #endif

@@ -1,4 +1,3 @@
-#include <iostream>
 #include <memory>
 #include <random>
 #include <vector>
@@ -348,4 +347,37 @@ TEST_CASE("Connectivity test", "[face][model]") {
 	 * model remains disconnected. */
 	m->add_face({m, {6, 7, 8}});
 	REQUIRE(!m->is_connected());
+}
+
+TEST_CASE("Convexity test", "[face][model]") {
+	auto m_convex = Model::create();
+
+	m_convex->add_vertex({1.f, 1.f, -1.f});   /* 0 */
+	m_convex->add_vertex({1.f, 1.f, 0.f});    /* 1 */
+	m_convex->add_vertex({1.f, 0.f, 0.f});    /* 2 */
+	m_convex->add_vertex({0.f, 1.5f, -1.5f}); /* 3 */
+
+	m_convex->add_face({m_convex, {0, 3, 1}});
+	m_convex->add_face({m_convex, {0, 2, 3}});
+	m_convex->add_face({m_convex, {1, 3, 2}});
+
+	/* Copy the model at this stage */
+	auto m_concave = Model::create(m_convex);
+
+	/* One more closing face for m_convex */
+	m_convex->add_face({m_convex, {0, 1, 2}});
+
+	REQUIRE(m_convex->is_convex());
+
+	/* Complete the copy model to form a concave shape */
+	m_concave->add_vertex({2.f, 1.f, 0.f});  /* 4 */
+	m_concave->add_vertex({2.f, 0.f, -1.f}); /* 5 */
+
+	m_concave->add_face({m_concave, {0, 1, 4}});
+	m_concave->add_face({m_concave, {1, 2, 4}});
+	m_concave->add_face({m_concave, {0, 5, 2}});
+	m_concave->add_face({m_concave, {0, 4, 5}});
+	m_concave->add_face({m_concave, {2, 5, 4}});
+
+	REQUIRE(!m_concave->is_convex());
 }

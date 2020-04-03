@@ -1,5 +1,3 @@
-#include <iostream>
-
 #include "catch.hpp"
 
 #include <3dconv/linalg.hpp>

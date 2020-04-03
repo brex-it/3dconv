@@ -218,9 +218,7 @@ Model::create(const std::shared_ptr<const Model> other)
 {
 	auto model = make_shared<ModelCreateHelper>(*other);
 	for (auto &f : model->faces_) {
-		/* NOTE: const_cast because std::set
-		 *       provides only const iterators */
-		const_cast<Face &>(f).model_ = model;
+		f.model_ = model;
 	}
 	return model;
 }
@@ -251,29 +249,13 @@ Model::faces() const
 	return faces_;
 }
 
-bool
-Model::is_triangulated() const
-{
-	return is_triangulated_;
-}
-
-bool
-Model::is_connected() const
-{
-	if (recalc_connectivity_) {
-		is_connected_ = check_connectivity(faces_, vertices_.size());
-		recalc_connectivity_ = false;
-	}
-	return is_connected_;
-}
-
 /* -------- Modifiers -------- */
 
 void
 Model::add_vertex(const FVec<float, 4> &&v)
 {
 	vertices_.emplace_back(v);
-	recalc_connectivity_ = true;
+	needs_recalc_properties();
 }
 
 void
@@ -303,7 +285,7 @@ Model::add_face(const Face &f)
 		is_triangulated_ = false;
 	}
 	is_validated_ = false;
-	recalc_connectivity_ = true;
+	needs_recalc_properties();
 }
 
 void
@@ -392,7 +374,7 @@ Model::triangulate()
 /* -------- Queries, validation -------- */
 
 float
-Model::surface_area()
+Model::surface_area() const
 {
 	if (!is_validated_) {
 		validate();
@@ -402,8 +384,9 @@ Model::surface_area()
 	 * of the original faces. */
 	auto model = shared_from_this();
 	if (!is_triangulated_) {
-		model = Model::create(shared_from_this());
-		model->triangulate();
+		auto model_cpy = Model::create(shared_from_this());
+		model_cpy->triangulate();
+		model = model_cpy;
 	}
 
 	float sum{0.f};
@@ -415,7 +398,7 @@ Model::surface_area()
 
 /* Algorithm from here: https://doi.org/10.1109/ICIP.2001.958278 */
 float
-Model::volume()
+Model::volume() const
 {
 	if (!is_validated_) {
 		validate();
@@ -425,8 +408,9 @@ Model::volume()
 	 * of the original faces. */
 	auto model = shared_from_this();
 	if (!is_triangulated_) {
-		model = Model::create(shared_from_this());
-		model->triangulate();
+		auto model_cpy = Model::create(shared_from_this());
+		model_cpy->triangulate();
+		model = model_cpy;
 	}
 
 	float sum{0.f};
@@ -442,8 +426,40 @@ Model::volume()
 	return sum;
 }
 
+bool
+Model::is_triangulated() const
+{
+	return is_triangulated_;
+}
+
+bool
+Model::is_connected() const
+{
+	if (!is_validated_) {
+		validate();
+	}
+	if (recalc_connectivity_) {
+		is_connected_ = check_connectivity(faces_, vertices_.size());
+		recalc_connectivity_ = false;
+	}
+	return is_connected_;
+}
+
+bool
+Model::is_convex() const
+{
+	if (!is_validated_) {
+		validate();
+	}
+	if (recalc_convexity_) {
+		is_convex_ = get_concave_vertices().size() == 0;
+		recalc_convexity_ = false;
+	}
+	return is_convex_;
+}
+
 void
-Model::validate()
+Model::validate() const
 {
 	if (is_validated_) {
 		return;
@@ -466,6 +482,13 @@ Model::validate()
 }
 
 /* -------- Private methods -------- */
+
+inline void
+Model::needs_recalc_properties()
+{
+	recalc_connectivity_ = true;
+	recalc_convexity_ = true;
+}
 
 bool
 Model::check_connectivity(const set<Face> &faces, const size_t nverts)
@@ -513,4 +536,27 @@ Model::check_connectivity(const set<Face> &faces, const size_t nverts)
 	 *       triangles or higher order shapes etc.) */
 	return connections.empty() && bs_union.all();
 
+}
+
+const typename Model::FaceToIndexVecMap
+Model::get_concave_vertices() const
+{
+	if (!is_validated_) {
+		validate();
+	}
+
+	FaceToIndexVecMap conc_verts;
+
+	for (const auto &f : faces_) {
+		for (size_t i = 0; i < vertices_.size(); ++i) {
+			auto vec_to_point = vec_slice<0,3>(vertices_[i]
+				- vertices_[f.vertices()[0]]);
+			if (dot_product(vec_to_point, f.normal())
+					> EPSILON<float>) {
+				conc_verts[f].push_back(i);
+			}
+		}
+	}
+
+	return conc_verts;
 }
