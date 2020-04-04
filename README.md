@@ -80,18 +80,16 @@ $ ninja -C build test
 
 ## Documentation
 The code is really well documented and if doxygen is available on the build
-system an html documentation is automatically will be built in the
+system an html documentation will automatically be built in the
 configuration phase. The default location of the html files is
 `<build-dir>/doc`.
 
 ## Plugins
-On how to add plugins see [Plugins](./plugins/README.md).
+On how to add plugins see [Plugins](./doc/plugins.md).
 
 ## TODO
 * Write more linalg unit tests
 * Reconsider plugin system
-* After a better plugin system design use static library for testing (hopefully
-  results in better test build time)
 
 ## License
 This software is distributed under the terms and conditions of the 3-Clause BSD

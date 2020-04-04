@@ -4,7 +4,9 @@ We can easily write new plugins for input parsing and output writing. The only
 thing we need to do is to create a new class which is derived from the Parser
 or Writer classes depending on what kind of plugin we want to implement. It is
 important that the implementation files of the plugins should be placed into
-the `plugins/(parsers|writers)` subdirectories.
+the `plugins/(parsers|writers)` subdirectories, furthermore, the names of the
+actual implementation files should be listed in the main `meson.build` file
+appended to the corresponding array.
 
 ## Parsers
 
