@@ -61,10 +61,10 @@ public:
 
 	/** Creates an empty Face object with a std::shared_ptr
 	 * to its associated Model object. */
-	Face(const std::shared_ptr<Model> model);
+	Face(const std::shared_ptr<const Model> model);
 
 	/** Creates a Face object with pre-filled index vectors. */
-	Face(const std::shared_ptr<Model> model, const IndexVecT &vertices,
+	Face(const std::shared_ptr<const Model> model, const IndexVecT &vertices,
 			const IndexVecT &texture_vertices = {},
 			const IndexVecT &vertex_normals = {},
 			const FVec<float, 3> &normal = {});
@@ -110,7 +110,7 @@ public:
 	bool operator<(const Face &r) const;
 
 private:
-	mutable std::weak_ptr<Model> model_;
+	mutable std::weak_ptr<const Model> model_;
 
 	IndexVecT vertices_;
 	IndexVecT texture_vertices_;
@@ -122,7 +122,7 @@ private:
 	void validate() const;
 	FVec<float, 3> compute_normal(Normalize normalize = Normalize::Yes) const;
 
-	std::shared_ptr<Model> get_model_shptr() const;
+	std::shared_ptr<const Model> get_model_shptr() const;
 };
 
 /**
@@ -188,6 +188,12 @@ public:
 	 * violates convexity (even due to non co-planar face vertices)
 	 * this function should return false. */
 	bool is_convex() const;
+	/** Returns true if the model is watertight and false otherwise. */
+	bool is_watertight() const;
+	/** Returns true if the model is watertight and false otherwise.
+	 * After return the given std::string object contains a message
+	 * describing the reason of water tightness violation, if any. */
+	bool is_watertight(std::string &msg) const;
 
 	/** Validates the model by checking the index consistency and
 	 * geometric validity of every faces. */
@@ -213,14 +219,17 @@ private:
 	mutable bool is_convex_{true};
 	bool is_triangulated_{true};
 	mutable bool is_validated_{true};
+	mutable bool is_watertight_{true};
 
 	mutable bool recalc_connectivity_{true};
 	mutable bool recalc_convexity_{true};
+	mutable bool recalc_water_tightness_{true};
 
 	void needs_recalc_properties();
 
 	static bool check_connectivity(const std::set<Face> &faces,
 			const size_t nverts);
+	bool check_water_tightness(std::string &msg) const;
 	using FaceToIndexVecMap = std::map<Face, typename Face::IndexVecT>;
 	const FaceToIndexVecMap get_concave_vertices() const;
 };

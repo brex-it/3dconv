@@ -333,6 +333,24 @@ operator%(const Mat<CoordT, Dim1, Dim2> &ml,
 	return res;
 }
 
+/**
+ * Matrix/vector multiply by scalar operator.
+ */
+template<typename CoordT, size_t Dim1, size_t Dim2>
+auto
+operator*(const Mat<CoordT, Dim1, Dim2> &ml,
+		const CoordT n)
+{
+	std::conditional_t<Dim2 == 1,
+		Vec<CoordT, Dim1>,
+		Mat<CoordT, Dim1, Dim2>> res{ml.elements};
+
+	for (size_t i = 0; i < res.elements.size(); ++i) {
+		res.elements[i] *= n;
+	}
+	return res;
+}
+
 /* Algorithms */
 
 /**

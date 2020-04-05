@@ -1,5 +1,6 @@
 #include <memory>
 #include <random>
+#include <string>
 #include <vector>
 
 #include "catch.hpp"
@@ -380,4 +381,168 @@ TEST_CASE("Convexity test", "[face][model]") {
 	m_concave->add_face({m_concave, {2, 5, 4}});
 
 	REQUIRE(!m_concave->is_convex());
+}
+
+TEST_CASE("Water tightness test", "[face][model]") {
+	auto m = Model::create();
+	bool expected_water_tightness{true};
+	string expected_msg;
+	vector<typename Face::IndexVecT> face_index_vecs;
+
+	vector<FVec<float, 4>> verts{
+		{2.f, -1.f, 1.f, 1.f},   /* 0 */
+		{1.f, -1.f, 1.f, 1.f},   /* 1 */
+		{-1.f, -1.f, 1.f, 1.f},  /* 2 */
+		{-2.f, -1.f, 1.f, 1.f},  /* 3 */
+
+		{1.f, 1.f, 1.f, 1.f},    /* 4 */
+		{-1.f, 1.f, 1.f, 1.f},   /* 5 */
+
+		{2.f, 2.f, 1.f, 1.f},    /* 6 */
+		{1.f, 2.f, 1.f, 1.f},    /* 7 */
+		{-1.f, 2.f, 1.f, 1.f},   /* 8 */
+		{-2.f, 2.f, 1.f, 1.f},   /* 9 */
+
+		{2.f, -1.f, -1.f, 1.f},  /* 10 */
+		{1.f, -1.f, -1.f, 1.f},  /* 11 */
+		{-1.f, -1.f, -1.f, 1.f}, /* 12 */
+		{-2.f, -1.f, -1.f, 1.f}, /* 13 */
+
+		{1.f, 1.f, -1.f, 1.f},   /* 14 */
+		{-1.f, 1.f, -1.f, 1.f},  /* 15 */
+
+		{2.f, 2.f, -1.f, 1.f},   /* 16 */
+		{1.f, 2.f, -1.f, 1.f},   /* 17 */
+		{-1.f, 2.f, -1.f, 1.f},  /* 18 */
+		{-2.f, 2.f, -1.f, 1.f},  /* 19 */
+	};
+
+	SECTION("Watertight model") {
+		face_index_vecs = {
+			{0, 6, 7, 4, 1},
+			{1, 4, 5, 2},
+			{2, 5, 8, 9, 3},
+			{10, 11, 14, 17, 16},
+			{11, 12, 15, 14},
+			{12, 13, 19, 18, 15},
+			{0, 10, 16, 6},
+			{4, 7, 17, 14},
+			{5, 15, 18, 8},
+			{3, 9, 19, 13},
+			{6, 16, 17, 7},
+			{4, 14, 15, 5},
+			{8, 18, 19, 9},
+			{0, 1, 2, 3, 13, 12, 11, 10},
+		};
+		expected_water_tightness = true;
+		expected_msg = "";
+	}
+
+
+	SECTION("Self intersection") {
+		m->add_vertex({1.f, 3.f, 1.f, 1.f});  /* 20 */
+		m->add_vertex({1.f, 3.f, -1.f, 1.f}); /* 21 */
+
+		face_index_vecs = {
+			{0, 6, 7, 4, 1},
+			{1, 4, 5, 2},
+			{2, 5, 9, 3},
+			{10, 11, 14, 17, 16},
+			{11, 12, 15, 14},
+			{12, 13, 19, 15},
+			{0, 10, 16, 6},
+			{4, 8, 18, 14},
+			{5, 15, 21, 20},
+			{3, 9, 19, 13},
+			{6, 16, 17, 18, 8, 7},
+			{4, 14, 15, 5},
+			{9, 20, 21, 19},
+			{0, 1, 2, 3, 13, 12, 11, 10},
+			{5, 20, 9},
+			{4, 7, 8},
+			{14, 18, 17},
+			{15, 19, 21},
+		};
+		expected_water_tightness = false;
+		expected_msg = "(Face:0:10:16:6) Self intersection";
+	}
+
+	SECTION("Boundary edge (occurrence: 1)") {
+		face_index_vecs = {
+			{1, 4, 5, 2},
+			{1, 11, 14, 4},
+			{11, 12, 15, 14},
+			{2, 5, 15, 12},
+			{4, 14, 15, 5},
+		};
+		expected_water_tightness = false;
+		expected_msg = "(Edge:1:2) Boundary edge";
+	}
+
+	SECTION("Non-manifold edge (occurrence: 4)") {
+		face_index_vecs = {
+			{1, 4, 5, 2},
+			{1, 11, 14, 4},
+			{11, 12, 15, 14},
+			{2, 5, 15, 12},
+			{4, 14, 15, 5},
+			{1, 2, 12, 11},
+			{1, 6, 16, 11},
+			{0, 6, 1},
+			{10, 11, 16},
+			{0, 10, 16, 6},
+			{0, 1, 11, 10},
+		};
+		expected_water_tightness = false;
+		expected_msg = "(Edge:1:11) Non-manifold edge";
+	}
+
+	SECTION("Non-manifold vertex") {
+		face_index_vecs = {
+			{1, 4, 5, 2},
+			{1, 11, 14, 4},
+			{11, 12, 15, 14},
+			{2, 5, 15, 12},
+			{4, 14, 15, 5},
+			{1, 2, 12, 11},
+			{2, 9, 3},
+			{3, 9, 19, 13},
+			{2, 19, 9},
+			{2, 3, 13},
+			{2, 13, 19},
+		};
+		expected_water_tightness = false;
+		expected_msg = "(Vertex:2) Non-manifold vertex";
+	}
+
+	SECTION("Disconnected but watertight model") {
+		face_index_vecs = {
+			{0, 4, 1},
+			{10, 11, 14},
+			{2, 5, 3},
+			{12, 13, 15},
+			{0, 10, 14, 4},
+			{3, 5, 15, 13},
+			{1, 4, 14, 11},
+			{2, 12, 15, 5},
+			{0, 1, 11, 10},
+			{2, 3, 13, 12},
+		};
+		expected_water_tightness = true;
+		expected_msg = "";
+	}
+
+	for (const auto &v : verts) {
+		m->add_vertex(FVec<float, 4>{v});
+	}
+	for (const auto &fiv : face_index_vecs) {
+		m->add_face(Face{m, fiv});
+	}
+
+	string msg;
+	bool water_tightness = m->is_watertight(msg);
+	REQUIRE(water_tightness == expected_water_tightness);
+	REQUIRE(msg == expected_msg);
+
+	REQUIRE(m->is_watertight() == expected_water_tightness);
 }

@@ -1,12 +1,15 @@
 #include <algorithm>
 #include <cmath>
-#include <iostream>
 #include <iterator>
 #include <limits>
 #include <list>
+#include <map>
 #include <memory>
 #include <set>
 #include <sstream>
+#include <string>
+#include <utility>
+#include <vector>
 
 #include <3dconv/linalg.hpp>
 #include <3dconv/model.hpp>
@@ -19,11 +22,11 @@ using namespace std;
 
 /* -------- Constructors -------- */
 
-Face::Face(const shared_ptr<Model> model)
+Face::Face(const shared_ptr<const Model> model)
 	: model_{model}
 {}
 
-Face::Face(const shared_ptr<Model> model, const IndexVecT &vertices,
+Face::Face(const shared_ptr<const Model> model, const IndexVecT &vertices,
 			const IndexVecT &texture_vertices,
 			const IndexVecT &vertex_normals,
 			const FVec<float, 3> &normal)
@@ -113,7 +116,7 @@ Face::operator<(const Face &r) const {
 
 /* -------- Private methods -------- */
 
-inline shared_ptr<Model>
+inline shared_ptr<const Model>
 Face::get_model_shptr() const
 {
 	auto model_shptr = model_.lock();
@@ -458,6 +461,26 @@ Model::is_convex() const
 	return is_convex_;
 }
 
+bool
+Model::is_watertight() const
+{
+	string msg;
+	return is_watertight(msg);
+}
+
+bool
+Model::is_watertight(string &msg) const
+{
+	if (!is_validated_) {
+		validate();
+	}
+	if (recalc_water_tightness_) {
+		is_watertight_ = check_water_tightness(msg);
+		recalc_water_tightness_ = false;
+	}
+	return is_watertight_;
+}
+
 void
 Model::validate() const
 {
@@ -488,6 +511,7 @@ Model::needs_recalc_properties()
 {
 	recalc_connectivity_ = true;
 	recalc_convexity_ = true;
+	recalc_water_tightness_ = true;
 }
 
 bool
@@ -536,6 +560,118 @@ Model::check_connectivity(const set<Face> &faces, const size_t nverts)
 	 *       triangles or higher order shapes etc.) */
 	return connections.empty() && bs_union.all();
 
+}
+
+/* Water tightness definition from here:
+ * https://davidstutz.de/a-formal-definition-of-watertight-meshes/ */
+bool
+Model::check_water_tightness(string &msg) const
+{
+	map<array<size_t, 2>, size_t> edge_occurrences;
+	ostringstream msg_stream;
+
+	/* Check if every edge has exactly two incident faces */
+	for (const auto &f : faces_) {
+		const auto &v = f.vertices();
+		const size_t vsz = v.size();
+		for (size_t i = 0; i < vsz; ++i) {
+			array<size_t, 2> edge{v[i], v[(i + 1) % vsz]};
+			if (edge[0] > edge[1]) {
+				swap(edge[0], edge[1]);
+			}
+			++edge_occurrences[edge];
+		}
+	}
+	for (const auto &[e, o] : edge_occurrences) {
+		if (o != 2) {
+			msg_stream << "(Edge:" << e[0] << ":" << e[1] << ") "
+				<< (o == 1 ? "Boundary edge" : "Non-manifold edge");
+			msg = msg_stream.str();
+			return false;
+		}
+	}
+
+	/* Check if the model doesn't contain non-manifold vertices */
+	for (size_t i = 0; i < vertices_.size(); ++i) {
+		set<Face> face_group;
+		size_t nverts{0};
+		map<size_t, size_t> index_map;
+		for (const auto &f : faces_) {
+			vector<size_t> selected_verts;
+			bool is_incident{false};
+			for (size_t vi : f.vertices()) {
+				if (vi == i) {
+					is_incident = true;
+				} else {
+					selected_verts.push_back(vi);
+				}
+			}
+			if (is_incident) {
+				for (auto &vi : selected_verts) {
+					if (index_map.find(vi) == index_map.end()) {
+						index_map[vi] = nverts++;
+					}
+					vi = index_map[vi];
+				}
+				face_group.emplace(Face{shared_from_this(),
+					selected_verts});
+			}
+		}
+		if (!check_connectivity(face_group, nverts)) {
+			msg_stream << "(Vertex:" << i << ") Non-manifold vertex";
+			msg = msg_stream.str();
+			return false;
+		}
+	}
+
+	/* Check if there are no self intersections */
+	auto conc_verts = get_concave_vertices();
+	for (const auto &[f, ind_list] : conc_verts) {
+		auto fvert = [&f, this](size_t i) {
+			return vec_slice<0, 3>(vertices_[f.vertices()[i]]);
+		};
+		auto is_conc = [&ind_list](size_t vi) {
+			for (const auto &i : ind_list) {
+				if (vi == i) { return true; }
+			}
+			return false;
+		};
+		for (const auto &[e, o] : edge_occurrences) {
+			/* The edge intersects the plane the current face lies on */
+			if ((is_conc(e[0]) && !is_conc(e[1]))
+					|| (!is_conc(e[0]) && is_conc(e[1]))) {
+				/* Calculate the intersection point */
+				const auto evert0 = vec_slice<0, 3>(vertices_[e[0]]);
+				const auto evert1 = vec_slice<0, 3>(vertices_[e[1]]);
+				const auto evec = evert1 - evert0;
+				const auto intersection = evert0 + evec
+					* (dot_product(fvert(0) - evert0, f.normal())
+					/ dot_product(evec, f.normal()));
+
+				/* Check whether the point is on the inside of the face */
+				size_t fvert_num = f.vertices().size();
+				for (size_t i = 0; i < fvert_num; ++i) {
+					bool on_outer_side = dot_product(
+						cross_product(fvert((i + 1) % fvert_num) - fvert(i),
+							intersection - fvert(i)),
+						f.normal()) <= 0; /*< EPSILON<float> ?*/
+					if (on_outer_side) {
+						goto nointersection;
+					}
+				}
+				msg_stream << "(Face";
+				for (const auto &v : f.vertices()) {
+					msg_stream << ":" << v;
+				}
+				msg_stream << ") " << "Self intersection";
+				msg = msg_stream.str();
+				return false;
+			nointersection:;
+			}
+		}
+	}
+
+	return true;
 }
 
 const typename Model::FaceToIndexVecMap
