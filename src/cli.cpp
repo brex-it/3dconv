@@ -1,16 +1,93 @@
 #include <filesystem>
 #include <iostream>
+#include <memory>
 #include <sstream>
 #include <string>
 
 #include <3dconv/cli.hpp>
 #include <3dconv/io.hpp>
 #include <3dconv/linalg.hpp>
+#include <3dconv/model.hpp>
 
 using namespace std;
 using namespace linalg;
 
 namespace fs = std::filesystem;
+
+Properties::Properties(string prop_str)
+{
+	for (const auto c : prop_str) {
+		switch (c) {
+		case 'a':
+			flags_ = numeric_limits<FlagWordT>::max();
+			break;
+		case 'c':
+			flags_ |= static_cast<FlagWordT>(Flag::Connectivity);
+			break;
+		case 'x':
+			flags_ |= static_cast<FlagWordT>(Flag::Convexity);
+			break;
+		case 's':
+			flags_ |= static_cast<FlagWordT>(Flag::SurfaceArea);
+			break;
+		case 't':
+			flags_ |= static_cast<FlagWordT>(Flag::Triangularity);
+			break;
+		case 'v':
+			flags_ |= static_cast<FlagWordT>(Flag::Volume);
+			break;
+		case 'w':
+			flags_ |= static_cast<FlagWordT>(Flag::WaterTightness);
+			break;
+		default:
+			ostringstream err_msg;
+			err_msg << "Unknown property flag: " << c;
+			throw CLIError(err_msg.str());
+		}
+	}
+}
+
+bool
+Properties::any() const
+{
+	return flags_ != 0;
+}
+
+bool
+Properties::connectivity() const
+{
+	return flags_ & static_cast<FlagWordT>(Flag::Connectivity);
+}
+
+bool
+Properties::convexity() const
+{
+	return flags_ & static_cast<FlagWordT>(Flag::Convexity);
+}
+
+bool
+Properties::surface_area() const
+{
+	return flags_ & static_cast<FlagWordT>(Flag::SurfaceArea);
+}
+
+bool
+Properties::triangularity() const
+{
+	return flags_ & static_cast<FlagWordT>(Flag::Triangularity);
+}
+
+bool
+Properties::volume() const
+{
+	return flags_ & static_cast<FlagWordT>(Flag::Volume);
+}
+
+bool
+Properties::water_tightness() const
+{
+	return flags_ & static_cast<FlagWordT>(Flag::WaterTightness);
+}
 
 void
 print_file_types_help()
@@ -29,20 +106,78 @@ print_file_types_help()
 }
 
 void
+print_properties(shared_ptr<Model> m, Properties props)
+{
+	if (props.any()) {
+		cout << "Model properties:" << endl;
+		cout << "-----------------" << endl;
+	}
+	if (props.connectivity()) {
+		cout << "Is connected: " << (m->is_connected() ? "yes" : "no") << endl;
+	}
+	if (props.convexity()) {
+		cout << "Is convex: " << (m->is_convex() ? "yes" : "no") << endl;
+	}
+	if (props.surface_area()) {
+		cout << "Surface area: " << m->surface_area() << endl;
+	}
+	if (props.triangularity()) {
+		cout << "Is triangulated: "
+			<< (m->is_triangulated() ? "yes" : "no") << endl;
+	}
+	if (props.volume()) {
+		cout << "Volume: " << m->volume() << endl;
+	}
+	if (props.water_tightness()) {
+		cout << "Is watertight: "
+			<< (m->is_watertight() ? "yes" : "no") << endl;
+	}
+}
+
+void
+print_properties_help()
+{
+	cout << "Supported properties and their flags:" << endl;
+	cout << "-------------------------------------" << endl;
+	cout << endl;
+	cout << "      Property name   |   Flag" << endl;
+	cout << "   -------------------+----------" << endl;
+	cout << "      connectivity    |    c" << endl;
+	cout << "      convexity       |    x" << endl;
+	cout << "      surface area    |    s" << endl;
+	cout << "      triangularity   |    t" << endl;
+	cout << "      volume          |    v" << endl;
+	cout << "      water tightness |    w" << endl;
+	cout << endl;
+	cout << "  Or simply write 'a' to print all of the listed properties."
+		<< endl;
+	cout << endl;
+	cout << "  Any combination of these letter can be contained in the string"
+		<< endl;
+	cout << "  given as an argument for --properties but unsupported letters"
+		<< endl;
+	cout << "  will result in an error. If 'a' is present, other flags will be"
+		<< endl;
+	cout << "  omitted." << endl;
+}
+
+void
 print_transforms_help()
 {
-	cout << "Supported tranformations:" << endl;
-	cout << "-------------------------" << endl;
-	cout << "Rotation    : ro:<axis-x>:<axis-y>:<axis-z>:<angle-in-rad>" << endl;
-	cout << "Scaling     : sc:<factor>" << endl;
-	cout << "Translation : tr:<direction-x>:<direction-y>:<direction-z>" << endl;
+	cout << "Supported transformations:" << endl;
+	cout << "--------------------------" << endl;
+	cout << "  Rotation    : ro:<axis-x>:<axis-y>:<axis-z>:<angle-in-rad>"
+		<< endl;
+	cout << "  Scaling     : sc:<factor>" << endl;
+	cout << "  Translation : tr:<direction-x>:<direction-y>:<direction-z>"
+		<< endl;
 	cout << endl;
-	cout << "Any combination of these will be accepted. Multiple "
+	cout << "  Any combination of these will be accepted. Multiple "
 		"transformations" << endl;
-	cout << "can be given as a comma separated list of the above "
+	cout << "  can be given as a comma separated list of the above "
 		"commands." << endl;
-	cout << "E.g.:" << endl;
-	cout << "     sc:3.7,ro:1:1:0:1.57,sc:2.4,tr:-4.2:-.3:3.6" << endl;
+	cout << "  E.g.:" << endl;
+	cout << "       sc:3.7,ro:1:1:0:1.57,sc:2.4,tr:-4.2:-.3:3.6" << endl;
 }
 
 void

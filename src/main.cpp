@@ -1,5 +1,6 @@
 #include <cstdlib>
 #include <exception>
+#include <string>
 
 #include <CLI11/CLI11.hpp>
 
@@ -12,7 +13,7 @@ main(int argc, char *argv[])
 try {
 	/* CLI parsing phase */
 	std::string ifile, ofile, iotypes, transforms;
-	bool printprop;
+	std::string prop_str;
 
 	CLI::App cli_app;
 	cli_app.require_subcommand(1);
@@ -22,7 +23,7 @@ try {
 	run_command->add_option("-i,--input", ifile, "Input file")->required()
 		->check(CLI::ExistingFile);
 	run_command->add_option("-o,--output", ofile, "Output file")->required();
-	run_command->add_flag("-p,--properties", printprop, "Print model properties");
+	run_command->add_option("-p,--properties", prop_str, "Print model properties");
 	run_command->add_option("-t,--file-types", iotypes,
 			"Input and output file types in the form [in-type]:[out-type] "
 			"(If not specified the input and output file extensions will "
@@ -36,6 +37,8 @@ try {
 	man_command->callback([](){
 		print_file_types_help();
 		std::cout << std::endl << std::endl;
+		print_properties_help();
+		std::cout << std::endl << std::endl;
 		print_transforms_help();
 		std::exit(0);
 	});
@@ -43,37 +46,30 @@ try {
 
 	std::string itype, otype;
 	parse_iotypes(ifile, ofile, iotypes, itype, otype);
+	Properties props{prop_str};
 
-	/* Parsing phase */
+	/* Model parsing phase */
 	auto parser = IOMap<Parser>::get(itype);
 	parser->open(ifile);
 	auto model = (*parser)();
 	model->validate();
 
-	if (printprop) {
-		/* Calculate properties before transformation */
-		std::cout << "Model properties:" << std::endl;
-		std::cout << "-----------------" << std::endl;
-		std::cout << "Surface area: " << model->surface_area() << std::endl;
-		std::cout << "Volume: " << model->volume() << std::endl;
-	}
+	/* Print requested properties before transformation */
+	print_properties(model, props);
 
 	/* Transformation phase */
 	if (!transforms.empty()) {
 		auto tr_matrix = parse_transforms(transforms);
 		model->transform(tr_matrix);
 
-		if (printprop) {
-			/* Calculate properties after transformation */
+		/* Print requested properties after transformation */
+		if (props.any()) {
 			std::cout << std::endl;
-			std::cout << "Model properties after transformation:" << std::endl;
-			std::cout << "--------------------------------------" << std::endl;
-			std::cout << "Surface area: " << model->surface_area() << std::endl;
-			std::cout << "Volume: " << model->volume() << std::endl;
 		}
+		print_properties(model, props);
 	}
 
-	/* Writing phase */
+	/* Model writing phase */
 	auto writer = IOMap<Writer>::get(otype);
 	writer->open(ofile);
 	(*writer)(model);

@@ -1,7 +1,7 @@
 project(
 	'3dconv',
 	'cpp',
-	version : '0.1.1',
+	version : '0.2.0',
 	license : 'BSD-3-Clause',
 	default_options : [
 		'b_lto=true',

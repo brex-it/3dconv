@@ -42,14 +42,14 @@ E.g.:
 ```txt
 Model properties:
 -----------------
-Surface area: 6
-Volume: 1
-
-Model properties after transformation:
---------------------------------------
-Surface area: 96
-Volume: 64
+Is connected: yes
+Is convex: no
+Surface area: 10.199
+Is triangulated: yes
+Volume: 2.19429
+Is watertight: no
 ```
+
 ## Dependencies
 * [CLI11](https://github.com/CLIUtils/CLI11) (source, included)
 * [Catch2](https://github.com/catchorg/Catch2) (source, included, for unit testing)
