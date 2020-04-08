@@ -40,7 +40,7 @@ jobs:
 #      run: scoop install ninja
 
     - name: Configure with Meson
-      run: CC=gcc-9 CXX=g++-9 meson . build
+      run: CC=gcc-9 CXX=g++-9 meson . build -Dbuild_tests=true
 
     - name: Build and run tests
       run: ninja -C build test
