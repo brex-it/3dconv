@@ -55,11 +55,43 @@ private:
 };
 
 /**
+ * Stores the parsed CLI context. The members are initialized
+ * at construction time from the given command line arguments.
+ * The constructor also handles the `--help` command line flag.
+ */
+class CLIContext {
+public:
+	///
+	CLIContext(int argc, char *argv[]);
+
+	///
+	const std::string &ifile() const;
+	///
+	const std::string &ofile() const;
+	///
+	const std::string &itype() const;
+	///
+	const std::string &otype() const;
+	///
+	const Properties &props() const;
+	///
+	const std::string &transforms() const;
+
+private:
+	std::string ifile_;
+	std::string ofile_;
+	std::string itype_;
+	std::string otype_;
+	Properties props_{""};
+	std::string transforms_;
+};
+
+/**
  * Prints all of the input and output file types
  * for which the respecting IOMap contains a
  * registered Parser or Writer object.
  */
-void print_file_types_help();
+std::string print_file_types_help();
 
 /**
  * Prints all properties of m for which props.<property-name>() returns true.
@@ -70,13 +102,13 @@ void print_properties(std::shared_ptr<Model> m, Properties props);
  * Prints all of the supported properties which
  * can be queried by `--properties`.
  */
-void print_properties_help();
+std::string print_properties_help();
 
 /**
  * Prints all of the supported affine transformations
  * and their command line syntax.
  */
-void print_transforms_help();
+std::string print_transforms_help();
 
 /**
  * Selects the appropriate input and output file types

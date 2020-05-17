@@ -10,11 +10,8 @@ format.
 ## Usage
 
 ```sh
-$ 3dconv run -i cube.obj -o cube.stl -t :stl-bin -T tr:1:-2.5:3.4
+$ 3dconv -i cube.obj -o cube.stl -t :stl-bin -T tr:1:-2.5:3.4
 ```
-In the example above we use the `run` subcommand which is used for doing the
-actual conversion. (Another subcommand is `man`, used for printing detailed
-usage message.)
 
 The mandatory input (`-i`) and output (`-o`) options are used for specifying
 the input and output files, respectively. If they have any extensions the
@@ -29,8 +26,8 @@ extension.
 
 With the `--transformation` or `-T` option we can apply any of the supported
 affine transformations (or a combination of them) to the model. For the exact
-syntax and the full list of transformations consult the manual (`man`
-subcommand).
+syntax and the full list of transformations consult the manual (`--help`
+command line option).
 
 A `--properties` option is also available which causes the program to print
 some geometrical properties of the model and if any transformation is

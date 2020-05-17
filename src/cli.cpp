@@ -1,8 +1,11 @@
+#include <cstdlib>
 #include <filesystem>
 #include <iostream>
 #include <memory>
 #include <sstream>
 #include <string>
+
+#include <CLI11/CLI11.hpp>
 
 #include <3dconv/cli.hpp>
 #include <3dconv/io.hpp>
@@ -89,20 +92,98 @@ Properties::water_tightness() const
 	return flags_ & static_cast<FlagWordT>(Flag::WaterTightness);
 }
 
-void
+CLIContext::CLIContext(int argc, char *argv[])
+{
+	std::string iotypes, prop_str;
+
+	CLI::App cli_app;
+
+	cli_app.add_option("-i,--input", ifile_, "Input file")->required()
+		->check(CLI::ExistingFile);
+	cli_app.add_option("-o,--output", ofile_, "Output file")->required();
+	cli_app.add_option("-p,--properties", prop_str, "Print model properties");
+	cli_app.add_option("-t,--file-types", iotypes,
+			"Input and output file types in the form [in-type]:[out-type] "
+			"(If not specified the input and output file extensions will "
+			"be used to determine the file types.)");
+	cli_app.add_option("-T,--transformation", transforms_,
+			"Transformation string")->join(',');
+
+	cli_app.footer([](){
+		ostringstream txt;
+		txt << print_file_types_help();
+		txt << std::endl << std::endl;
+		txt << print_properties_help();
+		txt << std::endl << std::endl;
+		txt << print_transforms_help();
+		return txt.str();
+	});
+
+	/* Rethrow CLI11 exceptions and handle --help flag */
+	try {
+		cli_app.parse(argc, argv);
+	} catch (const CLI::CallForHelp &h) {
+		exit(cli_app.exit(h));
+	} catch (const exception &e) {
+		throw CLIError(e.what());
+	}
+
+	props_ = Properties{prop_str};
+	parse_iotypes(ifile_, ofile_, iotypes, itype_, otype_);
+}
+
+const string &
+CLIContext::ifile() const
+{
+	return ifile_;
+}
+
+const string &
+CLIContext::ofile() const
+{
+	return ofile_;
+}
+
+const string &
+CLIContext::itype() const
+{
+	return itype_;
+}
+
+const string &
+CLIContext::otype() const
+{
+	return otype_;
+}
+
+const Properties &
+CLIContext::props() const
+{
+	return props_;
+}
+
+const string &
+CLIContext::transforms() const
+{
+	return transforms_;
+}
+
+string
 print_file_types_help()
 {
-	cout << "Supported file types:" << endl;
-	cout << "---------------------" << endl;
-	cout << "  INPUT:" << endl;
+	ostringstream out;
+	out << "Supported file types:" << endl;
+	out << "---------------------" << endl;
+	out << "  INPUT:" << endl;
 	for (const auto &p : IOMap<Parser>::instance().map()) {
-		cout << "   * " << p.first << endl;
+		out << "   * " << p.first << endl;
 	}
-	cout << endl;
-	cout << "  OUTPUT:" << endl;
+	out << endl;
+	out << "  OUTPUT:" << endl;
 	for (const auto &w : IOMap<Writer>::instance().map()) {
-		cout << "   * " << w.first << endl;
+		out << "   * " << w.first << endl;
 	}
+	return out.str();
 }
 
 void
@@ -134,50 +215,54 @@ print_properties(shared_ptr<Model> m, Properties props)
 	}
 }
 
-void
+string
 print_properties_help()
 {
-	cout << "Supported properties and their flags:" << endl;
-	cout << "-------------------------------------" << endl;
-	cout << endl;
-	cout << "      Property name   |   Flag" << endl;
-	cout << "   -------------------+----------" << endl;
-	cout << "      connectivity    |    c" << endl;
-	cout << "      convexity       |    x" << endl;
-	cout << "      surface area    |    s" << endl;
-	cout << "      triangularity   |    t" << endl;
-	cout << "      volume          |    v" << endl;
-	cout << "      water tightness |    w" << endl;
-	cout << endl;
-	cout << "  Or simply write 'a' to print all of the listed properties."
+	ostringstream out;
+	out << "Supported properties and their flags:" << endl;
+	out << "-------------------------------------" << endl;
+	out << endl;
+	out << "      Property name   |  Flag" << endl;
+	out << "    ------------------+--------" << endl;
+	out << "      connectivity    |   c" << endl;
+	out << "      convexity       |   x" << endl;
+	out << "      surface area    |   s" << endl;
+	out << "      triangularity   |   t" << endl;
+	out << "      volume          |   v" << endl;
+	out << "      water tightness |   w" << endl;
+	out << endl;
+	out << "  Or simply write 'a' to print all of the listed properties."
 		<< endl;
-	cout << endl;
-	cout << "  Any combination of these letter can be contained in the string"
+	out << endl;
+	out << "  Any combination of these letter can be contained in the string"
 		<< endl;
-	cout << "  given as an argument for --properties but unsupported letters"
+	out << "  given as an argument for --properties but unsupported letters"
 		<< endl;
-	cout << "  will result in an error. If 'a' is present, other flags will be"
+	out << "  will result in an error. If 'a' is present, other flags will be"
 		<< endl;
-	cout << "  omitted." << endl;
+	out << "  omitted." << endl;
+	return out.str();
 }
 
-void
+string
 print_transforms_help()
 {
-	cout << "Supported transformations:" << endl;
-	cout << "--------------------------" << endl;
-	cout << "  Rotation    : ro:<axis-x>:<axis-y>:<axis-z>:<angle-in-rad>"
+	ostringstream out;
+	out << "Supported transformations:" << endl;
+	out << "--------------------------" << endl;
+	out << "  Rotation    : ro:<axis-x>:<axis-y>:<axis-z>:<angle-in-rad>"
 		<< endl;
-	cout << "  Scaling     : sc:<factor>" << endl;
-	cout << "  Translation : tr:<direction-x>:<direction-y>:<direction-z>"
+	out << "  Scaling     : sc:<factor>" << endl;
+	out << "  Translation : tr:<direction-x>:<direction-y>:<direction-z>"
 		<< endl;
-	cout << endl;
-	cout << "  Any combination of these will be accepted. Multiple "
+	out << endl;
+	out << "  Any combination of these will be accepted. Multiple "
 		"transformations" << endl;
-	cout << "  can be given as a comma separated list of the above "
+	out << "  can be given as a comma separated list of the above "
 		"commands." << endl;
-	cout << "  E.g.:" << endl;
-	cout << "       sc:3.7,ro:1:1:0:1.57,sc:2.4,tr:-4.2:-.3:3.6" << endl;
+	out << "  E.g.:" << endl;
+	out << "       sc:3.7,ro:1:1:0:1.57,sc:2.4,tr:-4.2:-.3:3.6" << endl;
+	return out.str();
 }
 
 void
