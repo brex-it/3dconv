@@ -253,6 +253,7 @@ print_transforms_help()
 	out << "  Rotation    : ro:<axis-x>:<axis-y>:<axis-z>:<angle-in-rad>"
 		<< endl;
 	out << "  Scaling     : sc:<factor>" << endl;
+	out << "  Skew        : sk:<domain-dim><range-dim>:<angle>" << endl;
 	out << "  Translation : tr:<direction-x>:<direction-y>:<direction-z>"
 		<< endl;
 	out << endl;
@@ -329,39 +330,7 @@ parse_transforms(const std::string &trstr)
 		string opcode, arg;
 		if (getline(pss, opcode, ':')) {
 			size_t i = 0;
-			if (opcode == "tr") {
-				/* Translation */
-				FVec<float, 3> tvec;
-				while (getline(pss, arg, ':')) {
-					if (i >= 3) {
-						throw CLIError("Too many arguments "
-								"for translation.");
-					}
-					tvec[i] = stof(arg);
-					++i;
-				}
-				if (i < 3) {
-					throw CLIError("Not enough arguments "
-							"for translation.");
-				}
-				trmat *= make_translation_mat(tvec);
-			} else if (opcode == "sc") {
-				/* Scaling */
-				float factor{1.f};
-				while (getline(pss, arg, ':')) {
-					if (i >= 1) {
-						throw CLIError("Too many arguments "
-								"for scaling.");
-					}
-					factor = stof(arg);
-					++i;
-				}
-				if (i < 1) {
-					throw CLIError("Not enough arguments "
-							"for scaling.");
-				}
-				trmat *= make_scaling_mat<float, 3>(factor);
-			} else if (opcode == "ro") {
+			if (opcode == "ro") {
 				/* Rotation */
 				FVec<float, 3> axis;
 				float angle{0.f};
@@ -382,6 +351,86 @@ parse_transforms(const std::string &trstr)
 							"for rotation.");
 				}
 				trmat *= make_rotation_mat(axis, angle);
+			} else if (opcode == "sc") {
+				/* Scaling */
+				float factor{1.f};
+				while (getline(pss, arg, ':')) {
+					if (i >= 1) {
+						throw CLIError("Too many arguments "
+								"for scaling.");
+					}
+					factor = stof(arg);
+					++i;
+				}
+				if (i < 1) {
+					throw CLIError("Not enough arguments "
+							"for scaling.");
+				}
+				trmat *= make_scaling_mat<float, 3>(factor);
+			} else if (opcode == "sk") {
+				/* Skew */
+				size_t domain_dim, range_dim;
+				float angle{};
+				while (getline(pss, arg, ':')) {
+					if (i >= 2) {
+						throw CLIError("Too many arguments "
+								"for skew.");
+					}
+					if (i == 0) {
+						if (arg.size() != 2 || arg[0] == arg[1]) {
+							throw CLIError("Invalid skew map.");
+						}
+						switch (arg[0]) {
+						case 'x':
+							domain_dim = 0;
+							break;
+						case 'y':
+							domain_dim = 1;
+							break;
+						case 'z':
+							domain_dim = 2;
+							break;
+						default:
+							throw CLIError("Invalid skew domain.");
+						}
+						switch (arg[1]) {
+						case 'x':
+							range_dim = 0;
+							break;
+						case 'y':
+							range_dim = 1;
+							break;
+						case 'z':
+							range_dim = 2;
+							break;
+						default:
+							throw CLIError("Invalid skew range.");
+						}
+					} else {
+						angle = stof(arg);
+					}
+					++i;
+				}
+				if (i < 2) {
+					throw CLIError("Not enough arguments for skew.");
+				}
+				trmat *= make_skew_mat<float, 3>(domain_dim, range_dim, angle);
+			} else if (opcode == "tr") {
+				/* Translation */
+				FVec<float, 3> tvec;
+				while (getline(pss, arg, ':')) {
+					if (i >= 3) {
+						throw CLIError("Too many arguments "
+								"for translation.");
+					}
+					tvec[i] = stof(arg);
+					++i;
+				}
+				if (i < 3) {
+					throw CLIError("Not enough arguments "
+							"for translation.");
+				}
+				trmat *= make_translation_mat(tvec);
 			} else {
 				err_msg << "Unknown transformation: " << opcode;
 				throw CLIError(err_msg.str());

@@ -3,6 +3,7 @@
 
 #include <array>
 #include <cmath>
+#include <stdexcept>
 #include <type_traits>
 
 namespace linalg {
@@ -515,6 +516,22 @@ make_scaling_mat(CoordT factor)
 	for (size_t i = 0; i < Dim; ++i) {
 		mat[{i, i}] = factor;
 	}
+	return mat;
+}
+
+/**
+ * Constructs a 4x4 3D skew matrix (for use
+ * with homogeneous coordinates).
+ */
+template<typename CoordT, size_t Dim>
+auto
+make_skew_mat(size_t domain_dim, size_t range_dim, CoordT angle)
+{
+	if (domain_dim >= Dim || range_dim >= Dim) {
+		throw std::out_of_range("Invalid skew map indices.");
+	}
+	auto mat = make_id_mat<CoordT, Dim + 1>();
+	mat[{range_dim, domain_dim}] = std::tan(angle);
 	return mat;
 }
 

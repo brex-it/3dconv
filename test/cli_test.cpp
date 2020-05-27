@@ -103,6 +103,57 @@ TEST_CASE("Transformation parsing", "[transformation]") {
 			0, 0, 0, 1};
 	}
 
+	SECTION("Skew") {
+		SECTION("x -> y") {
+			transforms = "sk:xy:.7853981";
+			matrix = {
+				1, 0, 0, 0,
+				1, 1, 0, 0,
+				0, 0, 1, 0,
+				0, 0, 0, 1};
+		}
+		SECTION("x -> z") {
+			transforms = "sk:xz:.4636476";
+			matrix = {
+				1, 0, 0, 0,
+				0, 1, 0, 0,
+				.5, 0, 1, 0,
+				0, 0, 0, 1};
+		}
+		SECTION("y -> x") {
+			transforms = "sk:yx:.4636476";
+			matrix = {
+				1, .5, 0, 0,
+				0, 1, 0, 0,
+				0, 0, 1, 0,
+				0, 0, 0, 1};
+		}
+		SECTION("y -> z") {
+			transforms = "sk:yz:.7853981";
+			matrix = {
+				1, 0, 0, 0,
+				0, 1, 0, 0,
+				0, 1, 1, 0,
+				0, 0, 0, 1};
+		}
+		SECTION("z -> x") {
+			transforms = "sk:zx:.7853981";
+			matrix = {
+				1, 0, 1, 0,
+				0, 1, 0, 0,
+				0, 0, 1, 0,
+				0, 0, 0, 1};
+		}
+		SECTION("z -> y") {
+			transforms = "sk:zy:.4636476";
+			matrix = {
+				1, 0, 0, 0,
+				0, 1, .5, 0,
+				0, 0, 1, 0,
+				0, 0, 0, 1};
+		}
+	}
+
 	SECTION("Translation") {
 		transforms = "tr:1:-2:4";
 		matrix = {
@@ -127,6 +178,9 @@ TEST_CASE("Transformation parsing errors", "[transformation][error-handling]") {
 	REQUIRE_THROWS_MATCHES(parse_transforms("sc"),
 		CLIError, Message("Not enough arguments for scaling."));
 
+	REQUIRE_THROWS_MATCHES(parse_transforms("sk:zx"),
+		CLIError, Message("Not enough arguments for skew."));
+
 	REQUIRE_THROWS_MATCHES(parse_transforms("tr:1:2"),
 		CLIError, Message("Not enough arguments for translation."));
 
@@ -137,8 +191,27 @@ TEST_CASE("Transformation parsing errors", "[transformation][error-handling]") {
 	REQUIRE_THROWS_MATCHES(parse_transforms("sc:1:2"),
 		CLIError, Message("Too many arguments for scaling."));
 
+	REQUIRE_THROWS_MATCHES(parse_transforms("sk:yz:1:2"),
+		CLIError, Message("Too many arguments for skew."));
+
 	REQUIRE_THROWS_MATCHES(parse_transforms("tr:1:2:3:4"),
 		CLIError, Message("Too many arguments for translation."));
+
+	/* Skew specific errors */
+	REQUIRE_THROWS_MATCHES(parse_transforms("sk:yxz:1.2"),
+		CLIError, Message("Invalid skew map."));
+
+	REQUIRE_THROWS_MATCHES(parse_transforms("sk:z:2.3"),
+		CLIError, Message("Invalid skew map."));
+
+	REQUIRE_THROWS_MATCHES(parse_transforms("sk:xx:3.4"),
+		CLIError, Message("Invalid skew map."));
+
+	REQUIRE_THROWS_MATCHES(parse_transforms("sk:ay:4.5"),
+		CLIError, Message("Invalid skew domain."));
+
+	REQUIRE_THROWS_MATCHES(parse_transforms("sk:yp:5.6"),
+		CLIError, Message("Invalid skew range."));
 
 	/* Unknown transformation */
 	REQUIRE_THROWS_MATCHES(parse_transforms("un:1:2:3"),
