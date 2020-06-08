@@ -1,3 +1,4 @@
+#include <cmath>
 #include <memory>
 #include <random>
 #include <string>
@@ -254,6 +255,65 @@ TEST_CASE("Test model validation", "[face][model][error-handling]") {
 	}
 }
 
+TEST_CASE("Face convexification test", "[face][model]") {
+	auto m = Model::create();
+	vector<FVec<float, 4>> verts;
+	typename Face::IndexVecT f_indices;
+	vector<typename Face::IndexVecT> exp_f_indices;
+
+	SECTION("Only one concavity") {
+		verts = {
+			{1.f, .5f, 0.f, 1.f},    /* 0 */
+			{0.f, .5f, 0.f, 1.f},    /* 1 */
+			{.25f, .5f, 1.f, 1.f},   /* 2 */
+			{-1.f, .5f, .5f, 1.f},   /* 3 */
+			{-1.f, .5f, -1.f, 1.f},  /* 4 */
+			{-.25f, .5f, -1.f, 1.f}, /* 5 */
+		};
+		f_indices = {0, 1, 2, 3, 4, 5};
+		exp_f_indices = {
+			{0, 1, 4, 5},
+			{1, 2, 3, 4},
+		};
+	}
+
+	SECTION("More concavities") {
+		verts = {
+			{-7.8f, 2.5f, -2.f, 1.f}, /* 0 */
+			{-7.8f, 3.f, 0.f, 1.f},   /* 1 */
+			{-7.8f, 2.f, 1.f, 1.f},   /* 2 */
+			{-7.8f, 3.f, 1.5f, 1.f},  /* 3 */
+			{-7.8f, 4.f, 1.f, 1.f},   /* 4 */
+			{-7.8f, 6.f, 2.5f, 1.f},  /* 5 */
+			{-7.8f, 6.f, -1.5f, 1.f}, /* 6 */
+			{-7.8f, 5.f, -1.f, 1.f},  /* 7 */
+		};
+		f_indices = {0, 1, 2, 3, 4, 5, 6, 7};
+		exp_f_indices = {
+			{7, 0, 1, 4},
+			{1, 2, 3, 4},
+			{6, 7, 4, 5},
+		};
+	}
+
+	for (const auto &v : verts) {
+		m->add_vertex(FVec<float, 4>{v});
+	}
+	m->add_face(Face{m, f_indices});
+
+	REQUIRE(m->faces().size() == 1);
+
+	/* After convexification there should be more than one faces */
+	m->convexify_faces();
+	REQUIRE(m->faces().size() == exp_f_indices.size());
+
+	/* Check whether we got a valid partitioning */
+	for (const auto &fi : exp_f_indices) {
+		auto f_it = m->faces().find(Face{m, fi});
+		REQUIRE(f_it != m->faces().end());
+	}
+}
+
 TEST_CASE("Transformation tests", "[face][model]") {
 	auto m = Model::create();
 	m->add_vertex({3.f, 4.f, 2.f, 1.f});
@@ -284,24 +344,23 @@ TEST_CASE("Transformation tests", "[face][model]") {
 }
 
 TEST_CASE("Triangulation test", "[face][model]") {
-	random_device rdev;
-	default_random_engine gen{rdev()};
-	uniform_int_distribution<int> idist(10, 47);
-	uniform_real_distribution<float> rdist(-50.f, 50.f);
-
 	auto m = Model::create();
 	Face f{m};
 
-	/* Create 9 random vertices an add them to one face */
+	/* Create 9 vertices lying on a circle and add them to one face */
 	for (int i = 0; i < 9; ++i) {
-		m->add_vertex({rdist(gen), rdist(gen), rdist(gen), 1.f});
+		float angle = 2 * M_PI * i / 9;
+		m->add_vertex({cosf(angle), 1.f, sinf(angle), 1.f});
 		f.add_vertex(i);
 	}
 
 	m->add_face(f);
+	REQUIRE(m->is_triangulated() == false);
+
 	m->triangulate();
 
 	/* After the triangulation we get 7 triangles */
+	REQUIRE(m->is_triangulated() == true);
 	REQUIRE(m->faces().size() == 7);
 
 	/* The triangles are created by partitioning the polygon

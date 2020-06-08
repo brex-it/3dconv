@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <cmath>
+#include <deque>
 #include <iterator>
 #include <limits>
 #include <list>
@@ -35,6 +36,24 @@ Face::Face(const shared_ptr<const Model> model, const IndexVecT &vertices,
 {
 //	compute_normal();
 //	validate();
+}
+
+Face::Face(const Face &orig_face, const IndexVecT &indices)
+	: model_{orig_face.model_}
+{
+	for (auto i : indices) {
+		vertices_.push_back(orig_face.vertices_[i]);
+	}
+	if (!orig_face.texture_vertices_.empty()) {
+		for (auto i : indices) {
+			texture_vertices_.push_back(orig_face.texture_vertices_[i]);
+		}
+	}
+	if (!orig_face.vertex_normals_.empty()) {
+		for (auto i : indices) {
+			vertex_normals_.push_back(orig_face.vertex_normals_[i]);
+		}
+	}
 }
 
 /* -------- Getters -------- */
@@ -129,23 +148,74 @@ Face::get_model_shptr() const
 inline FVec<float, 3>
 Face::compute_normal(Normalize normalize) const
 {
-	if (vertices_.size() < 3) {
+	const auto &vsz = vertices_.size();
+	if (vsz < 3) {
 		throw ModelError("Face must contain at least 3 vertices.");
 	}
 
 	auto model_shptr = get_model_shptr();
-	const auto &v = model_shptr->vertices();
-	FVec<float, 4> plane_vec1 = v[vertices_[1]] - v[vertices_[0]];
-	FVec<float, 4> plane_vec2 = v[vertices_[2]] - v[vertices_[0]];
+	const auto &mv = model_shptr->vertices();
 
-	return vec_slice<0, 3>(cross_product(plane_vec1,
-		plane_vec2, normalize));
+	auto v0 = mv[vertices_[0]];
+	auto v1 = mv[vertices_[1]];
+	auto v2 = mv[vertices_[2]];
+	auto normal = cross_product(v1 - v0, v2 - v0, normalize);
+
+	/* This branch handles non-convex faces, where determining the
+	 * correct winding direction is trickier than in the convex case*/
+	if (vsz > 3) {
+		float distance{0.f};
+		size_t i0{0}, i1{1}, i2{2};
+		/* Select the indices (in Face's vertex list) of the two
+		 * vertices with the largest distance between them
+		 * FIXME: Use an asymptotically better algorithm, if possible */
+		for (size_t i = 0; i < vsz; ++i) {
+			for (size_t j = i + 1; j < vsz; ++j) {
+				float new_dist = euclidean_norm(mv[vertices_[i]]
+					- mv[vertices_[j]]);
+				if (new_dist > distance) {
+					distance = new_dist;
+					i0 = i;
+					i1 = j;
+				}
+			}
+		}
+
+		/* Select the third index belonging to the furthest vertex
+		 * from the previously selected line (v0<->v1) */
+		v0 = mv[vertices_[i0]];
+		v1 = mv[vertices_[i1]];
+		auto line_normal = cross_product(normal, v1 - v0, Normalize::Yes);
+		distance = 0.f;
+		for (size_t i = 0; i < vsz; ++i) {
+			float new_dist = abs(dot_product(mv[vertices_[i]] - v0,
+				line_normal));
+			if (new_dist > distance) {
+				distance = new_dist;
+				i2 = i;
+			}
+		}
+
+		/* Sort selected indices */
+		size_t tmp;
+		if (i0 > i1) { tmp = i0; i0 = i1; i1 = tmp; }
+		if (i1 > i2) { tmp = i1; i1 = i2; i2 = tmp; }
+		if (i0 > i1) { tmp = i0; i0 = i1; i1 = tmp; }
+
+		/* Recompute the valid normal */
+		v0 = mv[vertices_[i0]];
+		v1 = mv[vertices_[i1]];
+		v2 = mv[vertices_[i2]];
+		normal = cross_product(v1 - v0, v2 - v0, normalize);
+	}
+
+	return vec_slice<0, 3>(normal);
 }
 
 void
 Face::validate() const
 {
-	auto vsz = vertices_.size();
+	const auto vsz = vertices_.size();
 	if (vsz < 3) {
 		throw ModelError("Face must contain at least 3 vertices.");
 	}
@@ -292,6 +362,116 @@ Model::add_face(const Face &f)
 }
 
 void
+Model::convexify_faces()
+{
+	if (is_triangulated_) {
+		return;
+	}
+
+	if (!is_validated_) {
+		validate();
+	}
+
+	set<Face> new_faces;
+
+	vector<size_t> inner_indices;
+	vector<vector<size_t>> outer_indices;
+	deque<Face> tmp_faces;
+	set<array<size_t, 2>> visited_edges;
+
+	for (auto f = faces_.begin(); f != faces_.end();) {
+		/* Triangles are always convex */
+		if (f->vertices().size() == 3) {
+			++f;
+			continue;
+		} else {
+			tmp_faces.emplace_back(*f);
+			f = faces_.erase(f);
+		}
+
+		visited_edges.clear();
+		while (!tmp_faces.empty()) {
+			const auto &tmpf = tmp_faces.front();
+			const auto &v = tmpf.vertices();
+			const auto vsz = v.size();
+			if (vsz == 3) {
+				visited_edges.insert({v[0], v[1]});
+				visited_edges.insert({v[1], v[2]});
+				visited_edges.insert({v[2], v[0]});
+				new_faces.insert(tmpf);
+			} else {
+				size_t i{0};
+				for (; i < vsz; ++i) {
+					const array<size_t, 2> e{v[i], v[(i + 1) % vsz]};
+					if (visited_edges.find(e) != visited_edges.end()) {
+						/* Already visited */
+						continue;
+					}
+
+					inner_indices.clear();
+					outer_indices.clear();
+
+					const auto edge_vec_3d =
+						vec_slice<0, 3>(vertices_[e[1]] - vertices_[e[0]]);
+					const auto edge_vec_src_3d =
+						vec_slice<0, 3>(vertices_[e[0]]);
+					bool is_prev_inside{true};
+					inner_indices.push_back(i);
+					inner_indices.push_back((i + 1) % vsz);
+					for (size_t j = 2; j < vsz; ++j) {
+						const size_t ind = (i + j) % vsz;
+						const bool is_inside = dot_product(
+							cross_product(edge_vec_3d,
+								vec_slice<0, 3>(vertices_[v[ind]])
+									- edge_vec_src_3d),
+							tmpf.normal()) > 0;
+
+						if (is_inside) {
+							inner_indices.push_back(ind);
+							if (!is_prev_inside) {
+								outer_indices.back().push_back(ind);
+							}
+						} else {
+							if (is_prev_inside) {
+								outer_indices.emplace_back();
+								outer_indices.back()
+									.push_back((vsz + ind - 1) % vsz);
+							}
+							outer_indices.back().push_back(ind);
+						}
+
+						is_prev_inside = is_inside;
+					}
+					if (!is_prev_inside) {
+						outer_indices.back().push_back(i);
+					}
+
+					visited_edges.insert(e);
+
+					if (!outer_indices.empty()) {
+						/* The line of 'e' splits the face */
+						break;
+					}
+				}
+				if (i == vsz) {
+					/* tmpf is convex */
+					new_faces.insert(tmpf);
+				} else {
+					/* tmpf is concave, so slice it by the first-
+					 * found concave edge */
+					tmp_faces.emplace_back(tmpf, inner_indices);
+					for (const auto &ind_vec : outer_indices) {
+						tmp_faces.emplace_back(tmpf, ind_vec);
+					}
+				}
+			}
+			tmp_faces.pop_front();
+		}
+	}
+	faces_.merge(new_faces);
+}
+
+void
 Model::transform(const FMatSq<float, 4> &tmat)
 {
 	/* Apply tmat to every vertex */
@@ -316,10 +496,14 @@ Model::triangulate()
 		validate();
 	}
 
+	/* The algorithm below only works on convex faces,
+	 * so ensure that all of them are convex */
+	convexify_faces();
+
 	set<Face> new_faces;
 
 	for (auto f = faces_.begin(); f != faces_.end();) {
-		auto &fv = f->vertices();
+		const auto &fv = f->vertices();
 		if (fv.size() >= static_cast<size_t>(numeric_limits<long>::max())) {
 			ostringstream err_msg;
 			err_msg << "Triangulation algorithm can only be run on faces "
@@ -340,27 +524,8 @@ Model::triangulate()
 						goto nomoretriangles;
 					}
 
-					Face newf{shared_from_this()};
-					newf.add_vertex(fv[ivec[0]]);
-					newf.add_vertex(fv[ivec[1]]);
-					newf.add_vertex(fv[ivec[2]]);
-					newf.compute_normal();
-
-					auto &ftv = f->texture_vertices();
-					if (ftv.size() != 0) {
-						newf.add_texture_vertex(ftv[ivec[0]]);
-						newf.add_texture_vertex(ftv[ivec[1]]);
-						newf.add_texture_vertex(ftv[ivec[2]]);
-					}
-
-					auto &fvn = f->vertex_normals();
-					if (fvn.size() != 0) {
-						newf.add_vertex_normal(fvn[ivec[0]]);
-						newf.add_vertex_normal(fvn[ivec[1]]);
-						newf.add_vertex_normal(fvn[ivec[2]]);
-					}
-
-					new_faces.insert(newf);
+					new_faces.emplace(*f,
+						Face::IndexVecT{ivec[0], ivec[1], ivec[2]});
 
 					trind[i] += trind_step[i];
 				}
@@ -372,6 +537,7 @@ Model::triangulate()
 		}
 	}
 	faces_.merge(new_faces);
+	is_triangulated_ = true;
 }
 
 /* -------- Queries, validation -------- */
@@ -649,9 +815,9 @@ Model::check_water_tightness(string &msg) const
 					/ dot_product(evec, f.normal()));
 
 				/* Check whether the point is on the inside of the face */
-				size_t fvert_num = f.vertices().size();
+				const size_t fvert_num = f.vertices().size();
 				for (size_t i = 0; i < fvert_num; ++i) {
-					bool on_outer_side = dot_product(
+					const bool on_outer_side = dot_product(
 						cross_product(fvert((i + 1) % fvert_num) - fvert(i),
 							intersection - fvert(i)),
 						f.normal()) <= 0; /*< EPSILON<float> ?*/

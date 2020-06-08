@@ -69,6 +69,13 @@ public:
 			const IndexVecT &vertex_normals = {},
 			const FVec<float, 3> &normal = {});
 
+	/** Copy constructor with a selector index list.
+	 * The resulting object will only contain the copies of the selected
+	 * vertices, texture vertices and vertex normals from orig_face. indices
+	 * can be empty or can contain non-unique or less than three indices,
+	 * because no validation is performed at construction-time. */
+	Face(const Face &orig_face, const IndexVecT &indices);
+
 	/** Getter for index vector of vertices. */
 	const IndexVecT &vertices() const;
 	/** Getter for index vector of texture vertices. */
@@ -167,6 +174,9 @@ public:
 	 * with the actual Model instances will be accepted. */
 	void add_face(const Face &f);
 
+	/** Checks every face whether it is convex and splits the non-convex
+	 * ones into convex subfaces. */
+	void convexify_faces();
 	/** Accepts a four-dimensional transformation matrix and performs
 	 * the transformation on the model. The matrix should operate on
 	 * 3D objects with a fourth homogeneous coordinate. */
