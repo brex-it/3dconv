@@ -77,7 +77,7 @@ vertex(std::istringstream &lss, std::shared_ptr<Model> model)
 		/* If we have only three coordinates we'll
 		 * set weight to the default value 1.f. */
 		coords.push_back(1.f);
-	} else {
+	} else if (coords.size() < 3) {
 		throw std::logic_error("Not enough arguments for vertex.");
 	}
 
