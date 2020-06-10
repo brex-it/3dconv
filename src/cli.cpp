@@ -1,9 +1,11 @@
+#include <algorithm>
 #include <cstdlib>
 #include <filesystem>
 #include <iostream>
 #include <memory>
 #include <sstream>
 #include <string>
+#include <vector>
 
 #include <CLI11/CLI11.hpp>
 
@@ -12,110 +14,128 @@
 #include <3dconv/linalg.hpp>
 #include <3dconv/model.hpp>
 
+const char *FACE_TRANSFORMS_HELP_MSG = R"MSG(
+
+Supported face transformations:
+--------------------------------
+
+    Transformation  |  Command
+  ------------------+-----------
+    Convexification |     c
+    Triangulation   |     t
+
+  Any combination of these will be accepted. Multiple transformations
+  can be given as a comma separated list of the above commands.
+
+  E.g.:
+       c,t,t,c,t
+
+  These operations are idempotent, so they can be applied multiple
+  times, like in the example above, with no further effect after the
+  first application.
+)MSG";
+
+const char *MODEL_TRANSFORMS_HELP_MSG = R"MSG(
+
+Supported model transformations:
+--------------------------------
+
+    Transformation  |                   Command
+  ------------------+-----------------------------------------------
+    Rotation        | ro:<axis-x>:<axis-y>:<axis-z>:<angle-in-rad>
+    Scaling         | sc:<factor>
+    Skew            | sk:<domain-letter><range-letter>:<angle>
+    Translation     | tr:<direction-x>:<direction-y>:<direction-z>
+
+  Any combination of these will be accepted. Multiple transformations
+  can be given as a comma separated list of the above commands.
+
+  E.g.:
+       sc:3.7,ro:1:1:0:1.57,sc:2.4,tr:-4.2:-.3:3.6,sk:zy:1.57
+
+  In the skew command the domain and range letters can either be 'x',
+  'y' or 'z' meaning that in which direction should we move (domain)
+  from the origin to achieve skewing in an another direction (range).
+)MSG";
+
+const char *PROPERTIES_HELP_MSG = R"MSG(
+
+Supported properties and their flags:
+-------------------------------------
+
+      Property name   |  Flag
+    ------------------+--------
+      connectivity    |   c
+      convexity       |   x
+      surface area    |   s
+      triangularity   |   t
+      volume          |   v
+      water tightness |   w
+
+  Or simply write 'a' to print all of the listed properties.
+
+  Any combination of these letter can be contained in the string
+  given as an argument for --properties but unsupported letters
+  will result in an error. If 'a' is present, other flags will be
+  omitted.
+)MSG";
+
 using namespace std;
 using namespace linalg;
 
 namespace fs = std::filesystem;
 
-Properties::Properties(string prop_str)
+string
+print_file_formats_help()
 {
-	for (const auto c : prop_str) {
-		switch (c) {
-		case 'a':
-			flags_ = numeric_limits<FlagWordT>::max();
-			break;
-		case 'c':
-			flags_ |= static_cast<FlagWordT>(Flag::Connectivity);
-			break;
-		case 'x':
-			flags_ |= static_cast<FlagWordT>(Flag::Convexity);
-			break;
-		case 's':
-			flags_ |= static_cast<FlagWordT>(Flag::SurfaceArea);
-			break;
-		case 't':
-			flags_ |= static_cast<FlagWordT>(Flag::Triangularity);
-			break;
-		case 'v':
-			flags_ |= static_cast<FlagWordT>(Flag::Volume);
-			break;
-		case 'w':
-			flags_ |= static_cast<FlagWordT>(Flag::WaterTightness);
-			break;
-		default:
-			ostringstream err_msg;
-			err_msg << "Unknown property flag: " << c;
-			throw CLIError(err_msg.str());
-		}
+	ostringstream out;
+	out << endl;
+	out << "Supported file formats:" << endl;
+	out << "---------------------" << endl;
+	out << "  INPUT:" << endl;
+	for (const auto &p : IOMap<Parser>::instance().map()) {
+		out << "   * " << p.first << endl;
 	}
-}
-
-bool
-Properties::any() const
-{
-	return flags_ != 0;
-}
-
-bool
-Properties::connectivity() const
-{
-	return flags_ & static_cast<FlagWordT>(Flag::Connectivity);
-}
-
-bool
-Properties::convexity() const
-{
-	return flags_ & static_cast<FlagWordT>(Flag::Convexity);
-}
-
-bool
-Properties::surface_area() const
-{
-	return flags_ & static_cast<FlagWordT>(Flag::SurfaceArea);
-}
-
-bool
-Properties::triangularity() const
-{
-	return flags_ & static_cast<FlagWordT>(Flag::Triangularity);
-}
-
-bool
-Properties::volume() const
-{
-	return flags_ & static_cast<FlagWordT>(Flag::Volume);
-}
-
-bool
-Properties::water_tightness() const
-{
-	return flags_ & static_cast<FlagWordT>(Flag::WaterTightness);
+	out << endl;
+	out << "  OUTPUT:" << endl;
+	for (const auto &w : IOMap<Writer>::instance().map()) {
+		out << "   * " << w.first << endl;
+	}
+	out << endl;
+	return out.str();
 }
 
 CLIContext::CLIContext(int argc, char *argv[])
 {
-	std::string iotypes, prop_str;
-
 	CLI::App cli_app;
 
+	/* Order-insensitive options */
+	string ioformats;
 	cli_app.add_option("-i,--input", ifile_, "Input file")->required()
 		->check(CLI::ExistingFile);
 	cli_app.add_option("-o,--output", ofile_, "Output file")->required();
-	cli_app.add_option("-p,--properties", prop_str, "Print model properties");
-	cli_app.add_option("-t,--file-types", iotypes,
-			"Input and output file types in the form [in-type]:[out-type] "
-			"(If not specified the input and output file extensions will "
-			"be used to determine the file types.)");
-	cli_app.add_option("-T,--transformation", transforms_,
-			"Transformation string")->join(',');
+	cli_app.add_option("-f,--file-formats", ioformats,
+		"Input and output file formats in the form [in-format]:[out-format] "
+		"(If not specified the input and output file extensions will "
+		"be used to determine the file formats.)");
 
+	/* Order-sensitive options (so called "actions") */
+	vector<string> props, ftransforms, mtransforms;
+	auto prop_opt = cli_app.add_option("-p,--print-properties", props,
+		"Print model properties");
+	auto ftrans_opt = cli_app.add_option("-F,--face-transformation",
+		ftransforms, "Face transformation string");
+	auto mtrans_opt = cli_app.add_option("-T,--transformation,"
+		"--model-transformation", mtransforms, "Model transformation string");
+
+	/* Callback for creating a detailed help message
+	 * TODO: Move this into a source-independent man page */
 	cli_app.footer([](){
 		ostringstream txt;
-		txt << print_file_types_help();
-		txt << std::endl << std::endl;
-		txt << print_properties_help();
-		txt << std::endl << std::endl;
-		txt << print_transforms_help();
+		txt << print_file_formats_help();
+		txt << PROPERTIES_HELP_MSG;
+		txt << FACE_TRANSFORMS_HELP_MSG;
+		txt << MODEL_TRANSFORMS_HELP_MSG;
 		return txt.str();
 	});
 
@@ -128,8 +148,26 @@ CLIContext::CLIContext(int argc, char *argv[])
 		throw CLIError(e.what());
 	}
 
-	props_ = Properties{prop_str};
-	parse_iotypes(ifile_, ofile_, iotypes, itype_, otype_);
+	/* Set the final value of iformat_ and oformat_ */
+	parse_ioformats(ifile_, ofile_, ioformats, iformat_, oformat_);
+
+	/* Pack order-sensitive arguments into actions_ in the original order */
+	reverse(props.begin(), props.end());
+	reverse(ftransforms.begin(), ftransforms.end());
+	reverse(mtransforms.begin(), mtransforms.end());
+	using AT = Action::ActionType;
+	for (const auto &o : cli_app.parse_order()) {
+		if (o == prop_opt) {
+			actions_.emplace_back(AT::PrintProperties, props.back());
+			props.pop_back();
+		} else if (o == ftrans_opt) {
+			actions_.emplace_back(AT::FaceTransform, ftransforms.back());
+			ftransforms.pop_back();
+		} else if (o == mtrans_opt) {
+			actions_.emplace_back(AT::ModelTransform, mtransforms.back());
+			mtransforms.pop_back();
+		}
+	}
 }
 
 const string &
@@ -145,171 +183,97 @@ CLIContext::ofile() const
 }
 
 const string &
-CLIContext::itype() const
+CLIContext::iformat() const
 {
-	return itype_;
+	return iformat_;
 }
 
 const string &
-CLIContext::otype() const
+CLIContext::oformat() const
 {
-	return otype_;
+	return oformat_;
 }
 
-const Properties &
-CLIContext::props() const
+const std::vector<Action> &
+CLIContext::actions() const
 {
-	return props_;
+	return actions_;
 }
 
-const string &
-CLIContext::transforms() const
+FaceTransforms
+parse_face_transforms(const string &trstr)
 {
-	return transforms_;
-}
+	FaceTransforms ft;
 
-string
-print_file_types_help()
-{
-	ostringstream out;
-	out << "Supported file types:" << endl;
-	out << "---------------------" << endl;
-	out << "  INPUT:" << endl;
-	for (const auto &p : IOMap<Parser>::instance().map()) {
-		out << "   * " << p.first << endl;
-	}
-	out << endl;
-	out << "  OUTPUT:" << endl;
-	for (const auto &w : IOMap<Writer>::instance().map()) {
-		out << "   * " << w.first << endl;
-	}
-	return out.str();
-}
+	istringstream trss{trstr};
+	ostringstream err_msg;
+	string command;
 
-void
-print_properties(shared_ptr<Model> m, Properties props)
-{
-	if (props.any()) {
-		cout << "Model properties:" << endl;
-		cout << "-----------------" << endl;
+	while (getline(trss, command, ',')) {
+		if (command.size() != 1) {
+			err_msg << "Invalid face transformation: " << command;
+			throw CLIError(err_msg.str());
+		}
+		switch (command[0]) {
+		case 'c':
+			ft.convexify = true;
+			break;
+		case 't':
+			ft.triangulate = true;
+			break;
+		default:
+			err_msg << "Unknown face transformation: " << command;
+			throw CLIError(err_msg.str());
+		}
 	}
-	if (props.connectivity()) {
-		cout << "Is connected: " << (m->is_connected() ? "yes" : "no") << endl;
-	}
-	if (props.convexity()) {
-		cout << "Is convex: " << (m->is_convex() ? "yes" : "no") << endl;
-	}
-	if (props.surface_area()) {
-		cout << "Surface area: " << m->surface_area() << endl;
-	}
-	if (props.triangularity()) {
-		cout << "Is triangulated: "
-			<< (m->is_triangulated() ? "yes" : "no") << endl;
-	}
-	if (props.volume()) {
-		cout << "Volume: " << m->volume() << endl;
-	}
-	if (props.water_tightness()) {
-		cout << "Is watertight: "
-			<< (m->is_watertight() ? "yes" : "no") << endl;
-	}
-}
 
-string
-print_properties_help()
-{
-	ostringstream out;
-	out << "Supported properties and their flags:" << endl;
-	out << "-------------------------------------" << endl;
-	out << endl;
-	out << "      Property name   |  Flag" << endl;
-	out << "    ------------------+--------" << endl;
-	out << "      connectivity    |   c" << endl;
-	out << "      convexity       |   x" << endl;
-	out << "      surface area    |   s" << endl;
-	out << "      triangularity   |   t" << endl;
-	out << "      volume          |   v" << endl;
-	out << "      water tightness |   w" << endl;
-	out << endl;
-	out << "  Or simply write 'a' to print all of the listed properties."
-		<< endl;
-	out << endl;
-	out << "  Any combination of these letter can be contained in the string"
-		<< endl;
-	out << "  given as an argument for --properties but unsupported letters"
-		<< endl;
-	out << "  will result in an error. If 'a' is present, other flags will be"
-		<< endl;
-	out << "  omitted." << endl;
-	return out.str();
-}
-
-string
-print_transforms_help()
-{
-	ostringstream out;
-	out << "Supported transformations:" << endl;
-	out << "--------------------------" << endl;
-	out << "  Rotation    : ro:<axis-x>:<axis-y>:<axis-z>:<angle-in-rad>"
-		<< endl;
-	out << "  Scaling     : sc:<factor>" << endl;
-	out << "  Skew        : sk:<domain-dim><range-dim>:<angle>" << endl;
-	out << "  Translation : tr:<direction-x>:<direction-y>:<direction-z>"
-		<< endl;
-	out << endl;
-	out << "  Any combination of these will be accepted. Multiple "
-		"transformations" << endl;
-	out << "  can be given as a comma separated list of the above "
-		"commands." << endl;
-	out << "  E.g.:" << endl;
-	out << "       sc:3.7,ro:1:1:0:1.57,sc:2.4,tr:-4.2:-.3:3.6" << endl;
-	return out.str();
+	return ft;
 }
 
 void
-parse_iotypes(const std::string &ifile, const std::string &ofile,
-		const std::string &iotypes, std::string &itype, std::string &otype)
+parse_ioformats(const string &ifile, const string &ofile,
+		const string &ioformats, string &iformat, string &oformat)
 {
-	itype.clear();
-	otype.clear();
+	iformat.clear();
+	oformat.clear();
 
-	/* Parse file-types string */
-	if (!iotypes.empty()) {
-		if (iotypes.find(':') == string::npos) {
+	/* Parse file-formats string */
+	if (!ioformats.empty()) {
+		if (ioformats.find(':') == string::npos) {
 			throw CLIError("':' character cannot be omitted.");
 		}
-		istringstream ioss{iotypes};
-		string type;
+		istringstream ioss{ioformats};
+		string format;
 		size_t i = 0;
-		while (getline(ioss, type, ':')) {
+		while (getline(ioss, format, ':')) {
 			switch (i) {
 			case 0:
-				itype = type;
+				iformat = format;
 				break;
 			case 1:
-				otype = type;
+				oformat = format;
 				break;
 			default:
 				throw CLIError("Too many arguments for "
-						"type specification.");
+						"format specification.");
 			}
 			++i;
 		}
 	}
 
-	/* If either of the types are unset, check the file extensions */
-	if (itype.empty()) {
+	/* If either of the formats are unset, check the file extensions */
+	if (iformat.empty()) {
 		fs::path ipath{ifile};
 		if (ipath.has_extension()) {
-			itype = ipath.extension().string().substr(1);
+			iformat = ipath.extension().string().substr(1);
 		} else {
 			throw CLIError("Unable to determine input file format.");
 		}
 	}
-	if (otype.empty()) {
+	if (oformat.empty()) {
 		fs::path opath{ofile};
 		if (opath.has_extension()) {
-			otype = opath.extension().string().substr(1);
+			oformat = opath.extension().string().substr(1);
 		} else {
 			throw CLIError("Unable to determine output file format.");
 		}
@@ -317,7 +281,7 @@ parse_iotypes(const std::string &ifile, const std::string &ofile,
 }
 
 FMatSq<float, 4>
-parse_transforms(const std::string &trstr)
+parse_model_transforms(const string &trstr)
 {
 	auto trmat = make_id_mat<float, 4>();
 
@@ -442,4 +406,71 @@ parse_transforms(const std::string &trstr)
 	}
 
 	return trmat;
+}
+
+void
+print_properties(shared_ptr<Model> m, const string &prop_str)
+{
+	bool all{false};
+
+	bool connectivity{false};
+	bool convexity{false};
+	bool surface_area{false};
+	bool triangularity{false};
+	bool volume{false};
+	bool water_tightness{false};
+
+	for (const auto c : prop_str) {
+		switch (c) {
+		case 'a':
+			all = true;
+			break;
+		case 'c':
+			connectivity = true;
+			break;
+		case 'x':
+			convexity = true;
+			break;
+		case 's':
+			surface_area = true;
+			break;
+		case 't':
+			triangularity = true;
+			break;
+		case 'v':
+			volume = true;
+			break;
+		case 'w':
+			water_tightness = true;
+			break;
+		default:
+			ostringstream err_msg;
+			err_msg << "Unknown property flag: " << c;
+			throw CLIError(err_msg.str());
+		}
+	}
+
+	if (all || connectivity) {
+		cout << " * Is connected: " << (m->is_connected() ? "yes" : "no")
+			<< endl;
+	}
+	if (all || convexity) {
+		cout << " * Is convex: " << (m->is_convex() ? "yes" : "no") << endl;
+	}
+	if (all || surface_area) {
+		cout << " * Surface area: " << m->surface_area() << endl;
+	}
+	if (all || triangularity) {
+		cout << " * Is triangulated: "
+			<< (m->is_triangulated() ? "yes" : "no") << endl;
+	}
+	if (all || volume) {
+		cout << " * Volume: " << m->volume() << endl;
+	}
+	if (all || water_tightness) {
+		string msg;
+		bool wt = m->is_watertight(msg);
+		cout << " * Is watertight: "
+			<< (wt ? "yes" : "no [" + msg + "]") << endl;
+	}
 }

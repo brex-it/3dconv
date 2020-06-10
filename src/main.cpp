@@ -14,33 +14,47 @@ try {
 	CLIContext ctx{argc, argv};
 
 	/* Model parsing phase */
-	auto parser = IOMap<Parser>::get(ctx.itype());
+	auto parser = IOMap<Parser>::get(ctx.iformat());
 	parser->open(ctx.ifile());
 	auto model = (*parser)();
 	model->validate();
 
-	/* Print requested properties before transformation */
-	print_properties(model, ctx.props());
-
-	/* Transformation phase */
-	if (!ctx.transforms().empty()) {
-		std::cout << std::endl;
-		std::cout << ">>> Performing transformations: " << ctx.transforms();
-
-		auto tr_matrix = parse_transforms(ctx.transforms());
-		model->transform(tr_matrix);
-
-		std::cout << " Done." << std::endl;
-
-		/* Print requested properties after transformation */
-		if (ctx.props().any()) {
+	/* Action runner loop */
+	using AT = Action::ActionType;
+	for (const auto &a : ctx.actions()) {
+		switch (a.type) {
+		case AT::PrintProperties:
+			std::cout << ">>> Printing the requested properties: " << a.value
+				<< std::endl;
 			std::cout << std::endl;
+			print_properties(model, a.value);
+			std::cout << std::endl;
+			break;
+		case AT::FaceTransform:
+			{
+				auto ft = parse_face_transforms(a.value);
+				if (ft.convexify) {
+					std::cout << ">>> Performing face convexification"
+						<< std::endl;
+					model->convexify_faces();
+				}
+				if (ft.triangulate) {
+					std::cout << ">>> Performing face triangulation"
+						<< std::endl;
+					model->triangulate();
+				}
+			}
+			break;
+		case AT::ModelTransform:
+			std::cout << ">>> Performing model transformations: " << a.value
+				<< std::endl;
+			auto tr_matrix = parse_model_transforms(a.value);
+			model->transform(tr_matrix);
 		}
-		print_properties(model, ctx.props());
 	}
 
 	/* Model writing phase */
-	auto writer = IOMap<Writer>::get(ctx.otype());
+	auto writer = IOMap<Writer>::get(ctx.oformat());
 	writer->open(ctx.ofile());
 	(*writer)(model);
 

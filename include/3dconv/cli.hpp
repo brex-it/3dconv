@@ -17,41 +17,30 @@ struct CLIError : public std::logic_error {
 };
 
 /**
- * Stores flags of the selected properties and provides getters
- * to make queries on these flags. It behaves like a regular C-style
- * "bit vector" but guarantees type-safety.
- */
-class Properties {
-public:
-	///
-	Properties(std::string prop_str);
-
-	///
-	bool any() const;
-	///
-	bool connectivity() const;
-	///
-	bool convexity() const;
-	///
-	bool surface_area() const;
-	///
-	bool triangularity() const;
-	///
-	bool volume() const;
-	///
-	bool water_tightness() const;
-
-private:
-	using FlagWordT = uint_fast8_t;
-	enum struct Flag : FlagWordT {
-		Connectivity   = 1 << 0,
-		Convexity      = 1 << 1,
-		SurfaceArea    = 1 << 2,
-		Triangularity  = 1 << 3,
-		Volume         = 1 << 4,
-		WaterTightness = 1 << 5,
+ * Represents an action to be performed on a Model object.
+ * The type field determines the handling method and the
+ * value field contains the input of that handler. */
+struct Action {
+	enum struct ActionType {
+		PrintProperties,
+		FaceTransform,
+		ModelTransform,
 	};
-	FlagWordT flags_{0};
+
+	Action(ActionType t, const std::string &v)
+		: type{t}, value{v}
+	{}
+
+	ActionType type;
+	std::string value;
+};
+
+/**
+ * Helper struct for parsing face transformations.
+ */
+struct FaceTransforms {
+	bool convexify{false};
+	bool triangulate{false};
 };
 
 /**
@@ -69,59 +58,43 @@ public:
 	///
 	const std::string &ofile() const;
 	///
-	const std::string &itype() const;
+	const std::string &iformat() const;
 	///
-	const std::string &otype() const;
+	const std::string &oformat() const;
 	///
-	const Properties &props() const;
-	///
-	const std::string &transforms() const;
+	const std::vector<Action> &actions() const;
 
 private:
 	std::string ifile_;
 	std::string ofile_;
-	std::string itype_;
-	std::string otype_;
-	Properties props_{""};
-	std::string transforms_;
+	std::string iformat_;
+	std::string oformat_;
+	std::vector<Action> actions_;
 };
 
 /**
- * Prints all of the input and output file types
- * for which the respecting IOMap contains a
- * registered Parser or Writer object.
+ * Parses the given face transformation string and returns a
+ * FaceTransforms struct representing the requested transformations.
  */
-std::string print_file_types_help();
+FaceTransforms parse_face_transforms(const std::string &trstr);
+
+/**
+ * Selects the appropriate input and output file formats
+ * either from the given file format specifications or,
+ * if they are omitted, from the file extensions.
+ */
+void parse_ioformats(const std::string &ifile, const std::string &ofile,
+	const std::string &ioformats, std::string &iformat, std::string &oformat);
+
+/**
+ * Parses the given model transformation string and constructs
+ * a 4x4 matrix representing the homogeneous affine transformation.
+ */
+linalg::FMatSq<float, 4> parse_model_transforms(const std::string &trstr);
 
 /**
  * Prints all properties of m for which props.<property-name>() returns true.
  */
-void print_properties(std::shared_ptr<Model> m, Properties props);
-
-/**
- * Prints all of the supported properties which
- * can be queried by `--properties`.
- */
-std::string print_properties_help();
-
-/**
- * Prints all of the supported affine transformations
- * and their command line syntax.
- */
-std::string print_transforms_help();
-
-/**
- * Selects the appropriate input and output file types
- * either from the given file type specifications or if
- * they are omitted from the file extensions.
- */
-void parse_iotypes(const std::string &ifile, const std::string &ofile,
-		const std::string &iotypes, std::string &itype, std::string &otype);
-
-/**
- * Parses the given transformation string and constructs
- * a 4x4 matrix representing the homogeneous affine transformation.
- */
-linalg::FMatSq<float, 4> parse_transforms(const std::string &trstr);
+void print_properties(std::shared_ptr<Model> m, const std::string &prop_str);
 
 #endif

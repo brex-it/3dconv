@@ -10,7 +10,7 @@ format.
 ## Usage
 
 ```sh
-$ 3dconv -i cube.obj -o cube.stl -t :stl-bin -T tr:1:-2.5:3.4
+$ 3dconv -i cube.obj -o cube.stl -f :stl-bin -T tr:1:-2.5:3.4
 ```
 
 The mandatory input (`-i`) and output (`-o`) options are used for specifying
@@ -18,33 +18,71 @@ the input and output files, respectively. If they have any extensions the
 program will try to determine the file formats for them, but like in the
 case above when an extension is not a supported file format itself (like `stl`
 because of the ambiguity of `stl-ascii` and `stl-bin` formats) we need to
-specify the input and/or output formats exactly. This can be done with the `-t`
+specify the input and/or output formats exactly. This can be done with the `-f`
 option in the form of `[input-format]:[output-format]`. If this option is used,
 the format deduced from file extension is superseded by these selectors. Here
 we only specified the output format, so the input format is read from the file
 extension.
 
-With the `--transformation` or `-T` option we can apply any of the supported
-affine transformations (or a combination of them) to the model. For the exact
-syntax and the full list of transformations consult the manual (`--help`
-command line option).
+### Actions
 
-A `--properties` option is also available which causes the program to print
-some geometrical properties of the model and if any transformation is
-performed, the same properties will be printed before and after the
-transformation.
+The actions are order-sensitive command line options which are applied to the
+model sequentially in the given order. There are several types of actions as we
+can see in the following paragraphs.
+
+With the `--transformation` or `-T` option we can apply any of the supported
+affine transformations (or a combination of them) to the model. Similarly, some
+face transformations are also available and can be requested by passing the
+appropriate commands to the `-F` or `--face-transformation` command line
+options. For the exact syntax and the full list of transformations consult the
+manual (`--help` command line option).
+
+A `--print-properties` option is also available which causes the program to
+print some geometrical properties of the model.
 
 E.g.:
 
+```sh
+$ 3dconv -i example.obj -o example.stl -f :stl-bin -p cxv -T sc:2.4 -p xvt \
+-F t -p a -F c,c,t -T tr:1:4:1 -p stxv
+```
+
+A possible output of the previous command can look like this:
+
 ```txt
-Model properties:
------------------
-Is connected: yes
-Is convex: no
-Surface area: 10.199
-Is triangulated: yes
-Volume: 2.19429
-Is watertight: no
+>>> Printing the requested properties: cxv
+
+ * Is connected: yes
+ * Is convex: no
+ * Volume: 0.854563
+
+>>> Performing model transformations: sc:2.4
+>>> Printing the requested properties: xvt
+
+ * Is convex: no
+ * Is triangulated: no
+ * Volume: 11.8135
+
+>>> Performing face triangulation
+>>> Printing the requested properties: a
+
+ * Is connected: yes
+ * Is convex: no
+ * Surface area: 40.375
+ * Is triangulated: yes
+ * Volume: 11.8135
+ * Is watertight: no [(Edge:1010:1016) Boundary edge]
+
+>>> Performing face convexification
+>>> Performing face triangulation
+>>> Performing model transformations: tr:1:4:1
+>>> Printing the requested properties: stxv
+
+ * Is convex: no
+ * Surface area: 40.375
+ * Is triangulated: yes
+ * Volume: 11.8056
+
 ```
 
 ## Dependencies

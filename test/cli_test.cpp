@@ -12,76 +12,117 @@ using namespace std;
 
 using Catch::Matchers::Message;
 
-TEST_CASE("File format parsing", "[iotypes]") {
-	string ifile, ofile, iotypes, itype, otype;
-	string itype_expected, otype_expected;
+TEST_CASE("File format parsing", "[ioformats]") {
+	string ifile, ofile, ioformats, iformat, oformat;
+	string iformat_expected, oformat_expected;
 
 	ifile = "in-filename.in-ext";
 	ofile = "out-filename.out-ext";
 
-	SECTION("Both from iotypes") {
-		iotypes = "in-type:out-type";
-		itype_expected = "in-type";
-		otype_expected = "out-type";
+	SECTION("Both from ioformats") {
+		ioformats = "in-format:out-format";
+		iformat_expected = "in-format";
+		oformat_expected = "out-format";
 	}
 
-	SECTION("itype from iotypes") {
-		iotypes = "in-type:";
-		itype_expected = "in-type";
-		otype_expected = "out-ext";
+	SECTION("iformat from ioformats") {
+		ioformats = "in-format:";
+		iformat_expected = "in-format";
+		oformat_expected = "out-ext";
 	}
 
-	SECTION("otype from iotypes") {
-		iotypes = ":out-type";
-		itype_expected = "in-ext";
-		otype_expected = "out-type";
+	SECTION("oformat from ioformats") {
+		ioformats = ":out-format";
+		iformat_expected = "in-ext";
+		oformat_expected = "out-format";
 	}
 
 	SECTION("Both from file extensions") {
-		iotypes = "";
-		itype_expected = "in-ext";
-		otype_expected = "out-ext";
+		ioformats = "";
+		iformat_expected = "in-ext";
+		oformat_expected = "out-ext";
 	}
 
-	parse_iotypes(ifile, ofile, iotypes, itype, otype);
+	parse_ioformats(ifile, ofile, ioformats, iformat, oformat);
 
-	REQUIRE(itype == itype_expected);
-	REQUIRE(otype == otype_expected);
+	REQUIRE(iformat == iformat_expected);
+	REQUIRE(oformat == oformat_expected);
 }
 
-TEST_CASE("File format parsing errors", "[iotypes][error-handling]") {
-	string itype, otype;
+TEST_CASE("File format parsing errors", "[ioformats][error-handling]") {
+	string iformat, oformat;
 
-	SECTION("Invalid iotypes string (no colon)") {
+	SECTION("Invalid ioformats string (no colon)") {
 		REQUIRE_THROWS_MATCHES(
-			parse_iotypes("", "", "some-type", itype, otype),
+			parse_ioformats("", "", "some-format", iformat, oformat),
 			CLIError,
 			Message("':' character cannot be omitted."));
 	}
 
-	SECTION("Invalid iotypes string (too many colons)") {
+	SECTION("Invalid ioformats string (too many colons)") {
 		REQUIRE_THROWS_MATCHES(
-			parse_iotypes("", "", "type1:type2:type3", itype, otype),
+			parse_ioformats("", "", "format1:format2:format3", iformat, oformat),
 			CLIError,
-			Message("Too many arguments for type specification."));
+			Message("Too many arguments for format specification."));
 	}
 
-	SECTION("Cannot deduce input type") {
+	SECTION("Cannot deduce input format") {
 		REQUIRE_THROWS_MATCHES(
-			parse_iotypes("", "", "", itype, otype),
+			parse_ioformats("", "", "", iformat, oformat),
 			CLIError,
 			Message("Unable to determine input file format."));
 	}
 
-	SECTION("Cannot deduce output type") {
+	SECTION("Cannot deduce output format") {
 		REQUIRE_THROWS_MATCHES(
-			parse_iotypes("", "", "in-type:", itype, otype),
+			parse_ioformats("", "", "in-format:", iformat, oformat),
 			CLIError,
 			Message("Unable to determine output file format."));
 	}
 }
 
-TEST_CASE("Transformation parsing", "[transformation]") {
+bool operator==(const FaceTransforms &lft, const FaceTransforms &rft)
+{
+	return lft.convexify == rft.convexify
+		&& lft.triangulate == rft.triangulate;
+}
+
+TEST_CASE("Face transformation parsing", "[transformation]") {
+	string transforms;
+	FaceTransforms ft;
+
+	SECTION("Only convexification") {
+		transforms = "c";
+		ft = { .convexify = true };
+	}
+
+	SECTION("Only triangulation") {
+		transforms = "t";
+		ft = { .triangulate = true };
+	}
+
+	SECTION("Both of them") {
+		transforms = "t,c";
+		ft = { .convexify = true, .triangulate = true };
+	}
+
+	SECTION("Multiple times") {
+		transforms = "t,c,c,t,t,c";
+		ft = { .convexify = true, .triangulate = true };
+	}
+
+	REQUIRE(parse_face_transforms(transforms) == ft);
+}
+
+TEST_CASE("Face transformation parsing errors", "[transformation][error-handling]") {
+	REQUIRE_THROWS_MATCHES(parse_face_transforms("f"),
+		CLIError, Message("Unknown face transformation: f"));
+
+	REQUIRE_THROWS_MATCHES(parse_face_transforms("wo31c"),
+		CLIError, Message("Invalid face transformation: wo31c"));
+}
+
+TEST_CASE("Model transformation parsing", "[transformation]") {
 	string transforms;
 	FMatSq<float, 4> matrix;
 
@@ -163,57 +204,58 @@ TEST_CASE("Transformation parsing", "[transformation]") {
 			0, 0, 0, 1};
 	}
 
-	REQUIRE(matrices_approx_equal(parse_transforms(transforms), matrix));
+	REQUIRE(matrices_approx_equal(parse_model_transforms(transforms), matrix));
 }
 
-TEST_CASE("Transformation parsing errors", "[transformation][error-handling]") {
+TEST_CASE("Model transformation parsing errors",
+		"[transformation][error-handling]") {
 	/* Missing transformation */
-	REQUIRE_THROWS_MATCHES(parse_transforms("sc:2.1,,tr:2:2:-7"),
+	REQUIRE_THROWS_MATCHES(parse_model_transforms("sc:2.1,,tr:2:2:-7"),
 		CLIError, Message("Missing transformation."));
 
 	/* Not enough arguments */
-	REQUIRE_THROWS_MATCHES(parse_transforms("ro:1:2:3"),
+	REQUIRE_THROWS_MATCHES(parse_model_transforms("ro:1:2:3"),
 		CLIError, Message("Not enough arguments for rotation."));
 
-	REQUIRE_THROWS_MATCHES(parse_transforms("sc"),
+	REQUIRE_THROWS_MATCHES(parse_model_transforms("sc"),
 		CLIError, Message("Not enough arguments for scaling."));
 
-	REQUIRE_THROWS_MATCHES(parse_transforms("sk:zx"),
+	REQUIRE_THROWS_MATCHES(parse_model_transforms("sk:zx"),
 		CLIError, Message("Not enough arguments for skew."));
 
-	REQUIRE_THROWS_MATCHES(parse_transforms("tr:1:2"),
+	REQUIRE_THROWS_MATCHES(parse_model_transforms("tr:1:2"),
 		CLIError, Message("Not enough arguments for translation."));
 
 	/* Too many arguments */
-	REQUIRE_THROWS_MATCHES(parse_transforms("ro:1:2:3:4:5"),
+	REQUIRE_THROWS_MATCHES(parse_model_transforms("ro:1:2:3:4:5"),
 		CLIError, Message("Too many arguments for rotation."));
 
-	REQUIRE_THROWS_MATCHES(parse_transforms("sc:1:2"),
+	REQUIRE_THROWS_MATCHES(parse_model_transforms("sc:1:2"),
 		CLIError, Message("Too many arguments for scaling."));
 
-	REQUIRE_THROWS_MATCHES(parse_transforms("sk:yz:1:2"),
+	REQUIRE_THROWS_MATCHES(parse_model_transforms("sk:yz:1:2"),
 		CLIError, Message("Too many arguments for skew."));
 
-	REQUIRE_THROWS_MATCHES(parse_transforms("tr:1:2:3:4"),
+	REQUIRE_THROWS_MATCHES(parse_model_transforms("tr:1:2:3:4"),
 		CLIError, Message("Too many arguments for translation."));
 
 	/* Skew specific errors */
-	REQUIRE_THROWS_MATCHES(parse_transforms("sk:yxz:1.2"),
+	REQUIRE_THROWS_MATCHES(parse_model_transforms("sk:yxz:1.2"),
 		CLIError, Message("Invalid skew map."));
 
-	REQUIRE_THROWS_MATCHES(parse_transforms("sk:z:2.3"),
+	REQUIRE_THROWS_MATCHES(parse_model_transforms("sk:z:2.3"),
 		CLIError, Message("Invalid skew map."));
 
-	REQUIRE_THROWS_MATCHES(parse_transforms("sk:xx:3.4"),
+	REQUIRE_THROWS_MATCHES(parse_model_transforms("sk:xx:3.4"),
 		CLIError, Message("Invalid skew map."));
 
-	REQUIRE_THROWS_MATCHES(parse_transforms("sk:ay:4.5"),
+	REQUIRE_THROWS_MATCHES(parse_model_transforms("sk:ay:4.5"),
 		CLIError, Message("Invalid skew domain."));
 
-	REQUIRE_THROWS_MATCHES(parse_transforms("sk:yp:5.6"),
+	REQUIRE_THROWS_MATCHES(parse_model_transforms("sk:yp:5.6"),
 		CLIError, Message("Invalid skew range."));
 
 	/* Unknown transformation */
-	REQUIRE_THROWS_MATCHES(parse_transforms("un:1:2:3"),
+	REQUIRE_THROWS_MATCHES(parse_model_transforms("un:1:2:3"),
 		CLIError, Message("Unknown transformation: un"));
 }
