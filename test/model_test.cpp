@@ -18,7 +18,7 @@ TEST_CASE("Insert vertices and v.normals into Model", "[model]") {
 	auto m = Model::create();
 	random_device rdev;
 	default_random_engine gen{rdev()};
-	uniform_int_distribution<int> idist(10, 47);
+	uniform_int_distribution<size_t> idist(10, 47);
 	uniform_real_distribution<float> rdist(-50.f, 50.f);
 
 	/* First vertex */
@@ -26,7 +26,7 @@ TEST_CASE("Insert vertices and v.normals into Model", "[model]") {
 
 	/* Random number of random vertices and texture vertices */
 	auto vnum1 = idist(gen);
-	for (int i = 0; i < vnum1; ++i) {
+	for (size_t i = 0; i < vnum1; ++i) {
 		m->add_vertex({rdist(gen), rdist(gen), rdist(gen), 1.f});
 		m->add_texture_vertex({rdist(gen), rdist(gen), rdist(gen)});
 	}
@@ -38,7 +38,7 @@ TEST_CASE("Insert vertices and v.normals into Model", "[model]") {
 
 	/* Random number of random vertices and vertex normals */
 	auto vnum2 = idist(gen);
-	for (int i = 0; i < vnum2; ++i) {
+	for (size_t i = 0; i < vnum2; ++i) {
 		m->add_vertex({rdist(gen), rdist(gen), rdist(gen), 1.f});
 		m->add_vertex_normal({rdist(gen), rdist(gen), rdist(gen)});
 	}
