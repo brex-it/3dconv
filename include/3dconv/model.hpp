@@ -1,7 +1,6 @@
 #ifndef _3DCONV_MODEL_HPP
 #define _3DCONV_MODEL_HPP
 
-#include <algorithm>
 #include <map>
 #include <memory>
 #include <set>
