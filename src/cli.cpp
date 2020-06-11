@@ -75,9 +75,9 @@ Supported properties and their flags:
   Or simply write 'a' to print all of the listed properties.
 
   Any combination of these letter can be contained in the string
-  given as an argument for --properties but unsupported letters
-  will result in an error. If 'a' is present, other flags will be
-  omitted.
+  given as an argument for --print-properties but unsupported
+  letters will result in an error. If 'a' is present, other flags
+  will be omitted.
 )MSG";
 
 using namespace std;

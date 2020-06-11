@@ -152,7 +152,7 @@ Face::compute_normal(Normalize normalize) const
 	auto normal = cross_product(v1 - v0, v2 - v0, normalize);
 
 	/* This branch handles non-convex faces, where determining the
-	 * correct winding direction is trickier than in the convex case*/
+	 * correct winding direction is trickier than in the convex case */
 	if (vsz > 3) {
 		float distance{0.f};
 		size_t i0{0}, i1{1}, i2{2};

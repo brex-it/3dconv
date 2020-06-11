@@ -174,7 +174,7 @@ Model::convexify_faces()
 							cross_product(edge_vec_3d,
 								vec_slice<0, 3>(vertices_[v[ind]])
 									- edge_vec_src_3d),
-							tmpf.normal()) > 0;
+							tmpf.normal()) >= 0;
 
 						if (is_inside) {
 							inner_indices.push_back(ind);
