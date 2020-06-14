@@ -5,6 +5,7 @@
 #include <fstream>
 #include <ios>
 #include <memory>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <type_traits>
@@ -145,7 +146,14 @@ public:
 			init();
 		}
 
-		return instance_->map_.at(file_type);
+		try {
+			auto handler = instance_->map_.at(file_type);
+			return handler;
+		} catch (const std::out_of_range &oor) {
+			std::ostringstream err_msg;
+			err_msg << "No handler instance for file type: " << file_type;
+			throw IOError(err_msg.str(), "");
+		}
 	}
 
 	///

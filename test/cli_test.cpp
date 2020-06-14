@@ -75,7 +75,7 @@ TEST_CASE("File format parsing errors", "[ioformats][error-handling]") {
 
 	SECTION("Cannot deduce output format") {
 		REQUIRE_THROWS_MATCHES(
-			parse_ioformats("", "", "in-format:", iformat, oformat),
+			parse_ioformats("", "fname-no-ext", "in-format:", iformat, oformat),
 			CLIError,
 			Message("Unable to determine output file format."));
 	}

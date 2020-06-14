@@ -113,11 +113,13 @@ CLIContext::CLIContext(int argc, char *argv[])
 	string ioformats;
 	cli_app.add_option("-i,--input", ifile_, "Input file")->required()
 		->check(CLI::ExistingFile);
-	cli_app.add_option("-o,--output", ofile_, "Output file")->required();
+	cli_app.add_option("-o,--output", ofile_, "Output file");
 	cli_app.add_option("-f,--file-formats", ioformats,
 		"Input and output file formats in the form [in-format]:[out-format] "
 		"(If not specified the input and output file extensions will "
 		"be used to determine the file formats.)");
+	cli_app.add_option("-v,--verbosity", verbosity_,
+		"Sets the verbosity level (0 causes silent run)")->default_val(1);
 
 	/* Order-sensitive options (so called "actions") */
 	vector<string> props, ftransforms, mtransforms;
@@ -200,6 +202,25 @@ CLIContext::actions() const
 	return actions_;
 }
 
+int
+CLIContext::verbosity() const
+{
+	return verbosity_;
+}
+
+InfoPrinter::InfoPrinter(int verbosity)
+	: verbosity_level_{verbosity}
+{}
+
+void
+InfoPrinter::operator()(int verbosity, const std::string &s0,
+		const std::string &s1)
+{
+	if (verbosity <= verbosity_level_) {
+		cout << ">>> " << s0 << s1 << endl;
+	}
+}
+
 FaceTransforms
 parse_face_transforms(const string &trstr)
 {
@@ -274,7 +295,7 @@ parse_ioformats(const string &ifile, const string &ofile,
 		fs::path opath{ofile};
 		if (opath.has_extension()) {
 			oformat = opath.extension().string().substr(1);
-		} else {
+		} else if (!opath.empty()) {
 			throw CLIError("Unable to determine output file format.");
 		}
 	}

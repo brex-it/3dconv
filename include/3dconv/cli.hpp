@@ -63,6 +63,8 @@ public:
 	const std::string &oformat() const;
 	///
 	const std::vector<Action> &actions() const;
+	///
+	int verbosity() const;
 
 private:
 	std::string ifile_;
@@ -70,6 +72,26 @@ private:
 	std::string iformat_;
 	std::string oformat_;
 	std::vector<Action> actions_;
+	int verbosity_;
+};
+
+/**
+ * Info message printer for command-line interaction.
+ * At construction time we can set the desired verbosity level
+ * that acts as a threshold for every print requests through
+ * the call operator of the class.
+ */
+class InfoPrinter {
+public:
+	///
+	InfoPrinter(int verbosity);
+
+	///
+	void operator()(int verbosity, const std::string &s0,
+		const std::string &s1 = {});
+
+private:
+	int verbosity_level_;
 };
 
 /**
